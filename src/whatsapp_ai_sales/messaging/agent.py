@@ -30,7 +30,7 @@ class AutoReplyAgent:
     ) -> None:
         self._llm = llm_provider
         self._system_prompt = system_prompt
-        self._fallback_reply = fallback_reply
+        self.fallback_reply = fallback_reply
         self._window = window
         self._retriever = retriever
         self._language_detector = language_detector
@@ -75,7 +75,7 @@ class AutoReplyAgent:
         pricing_text: str | None = None,
     ) -> str:
         if not history:
-            return self._fallback_reply
+            return self.fallback_reply
 
         query = next(
             (m.content for m in reversed(history) if m.role == ROLE_INBOUND), None
@@ -89,13 +89,13 @@ class AutoReplyAgent:
         if self._retriever is not None:
             knowledge = self._retriever.retrieve(query) if query else []
             if not knowledge:
-                return self._fallback_reply
+                return self.fallback_reply
 
         context = self.build_context(history, customer, knowledge, language, pricing_text)
         try:
             return self._llm.chat(context)
         except Exception:
-            return self._fallback_reply
+            return self.fallback_reply
 
 
 def _last_turns(history: list[Message], window: int) -> list[Message]:

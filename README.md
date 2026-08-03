@@ -35,6 +35,9 @@ WAS_WHATSAPP_VERIFY_TOKEN=verify-me
 | POST | `/webhooks/whatsapp` | 接收消息 → RAG 检索 → AI 回复 → 外发 |
 | GET | `/api/crm/conversations` | 会话列表（含客户信息） |
 | GET | `/api/crm/conversations/{id}/messages` | 会话消息记录 |
+| POST | `/api/crm/conversations/{id}/takeover` | 人工接管（AI 停止自动回复） |
+| POST | `/api/crm/conversations/{id}/release` | 交还 AI 自动回复 |
+| POST | `/api/crm/conversations/{id}/messages` | 人工手动回复（经 provider 外发） |
 | POST | `/api/kb/products` | 录入/更新产品知识（结构化 sections → 切片入库） |
 | GET | `/api/kb/products` | 产品列表 |
 | DELETE | `/api/kb/products/{id}` | 删除产品（同步清理向量） |

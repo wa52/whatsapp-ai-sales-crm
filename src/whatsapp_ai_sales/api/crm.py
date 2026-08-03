@@ -1,15 +1,16 @@
-"""CRM read APIs: conversations and their message history."""
+"""CRM read + human-handling APIs."""
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlmodel import select
 
-from ..deps import SessionDep
-from ..models import Conversation, Customer
+from ..deps import ProviderDep, SessionDep
+from ..messaging.handling import HANDLER_AI, HANDLER_HUMAN
+from ..models import ROLE_OUTBOUND, Conversation, Customer, Message
 from ..repos import get_conversation_messages
 
 router = APIRouter(prefix="/api/crm", tags=["crm"])
@@ -74,3 +75,77 @@ def list_messages(conversation_id: int, session: SessionDep) -> list[MessageOut]
         )
         for m in messages
     ]
+
+
+class ManualMessageIn(BaseModel):
+    content: str
+
+
+class ConversationStateOut(BaseModel):
+    id: int
+    handler: str
+
+
+@router.post("/conversations/{conversation_id}/takeover", response_model=ConversationStateOut)
+def takeover(conversation_id: int, session: SessionDep) -> ConversationStateOut:
+    """A human takes over the conversation; the AI stops auto-replying."""
+    conversation = session.get(Conversation, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation.handler = HANDLER_HUMAN
+    conversation.updated_at = datetime.now(UTC)
+    session.commit()
+    return ConversationStateOut(id=conversation.id, handler=conversation.handler)
+
+
+@router.post("/conversations/{conversation_id}/release", response_model=ConversationStateOut)
+def release(conversation_id: int, session: SessionDep) -> ConversationStateOut:
+    """Return the conversation to the AI."""
+    conversation = session.get(Conversation, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation.handler = HANDLER_AI
+    conversation.updated_at = datetime.now(UTC)
+    session.commit()
+    return ConversationStateOut(id=conversation.id, handler=conversation.handler)
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages",
+    response_model=MessageOut,
+    status_code=201,
+)
+def send_manual_message(
+    conversation_id: int,
+    payload: ManualMessageIn,
+    session: SessionDep,
+    provider: ProviderDep,
+) -> MessageOut:
+    """A human sends a message to the customer on behalf of the business."""
+    conversation = session.get(Conversation, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    customer = session.get(Customer, conversation.customer_id)
+    if customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    provider_message_id = provider.send_message(customer.wa_id, payload.content)
+    message = Message(
+        conversation_id=conversation.id,
+        role=ROLE_OUTBOUND,
+        provider_message_id=provider_message_id,
+        content=payload.content,
+        status="sent",
+    )
+    session.add(message)
+    now = datetime.now(UTC)
+    conversation.last_message_at = now
+    conversation.updated_at = now
+    session.commit()
+    return MessageOut(
+        id=message.id,
+        role=message.role,
+        content=message.content,
+        status=message.status,
+        created_at=message.created_at,
+    )

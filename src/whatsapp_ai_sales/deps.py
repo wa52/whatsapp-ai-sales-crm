@@ -12,6 +12,7 @@ from .messaging.ingestion import MessageIngestion
 from .messaging.intent import IntentExtractor
 from .pricing.service import QuoteService
 from .rag.knowledge_base import KnowledgeBase
+from .whatsapp.base import WhatsAppProvider
 
 
 def get_session(request: Request) -> Iterator[Session]:
@@ -29,7 +30,15 @@ def get_ingestion(request: Request, session: SessionDep) -> MessageIngestion:
         provider=request.app.state.provider,
         intent_extractor=_build_intent_extractor(request, session),
         quote_service=QuoteService(session),
+        notifier=request.app.state.notifier,
     )
+
+
+def get_provider(request: Request) -> WhatsAppProvider:
+    return request.app.state.provider
+
+
+ProviderDep = Annotated[WhatsAppProvider, Depends(get_provider)]
 
 
 def _build_intent_extractor(request: Request, session: Session) -> IntentExtractor:

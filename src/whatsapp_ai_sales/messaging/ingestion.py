@@ -14,7 +14,9 @@ from ..repos import get_conversation_messages
 from ..whatsapp.base import WhatsAppProvider
 from ..whatsapp.webhook import InboundMessage
 from .agent import AutoReplyAgent
+from .handling import HANDLER_HUMAN, HandoffSignals, should_handoff
 from .intent import CustomerIntent, IntentExtractor, merge_intents
+from .notification import KIND_HANDOFF, KIND_LEAD_HIGH, NotificationEvent, Notifier
 from .scoring import score_lead
 
 
@@ -24,13 +26,19 @@ class HandlingResult:
     reply_text: str | None = None
 
 
+@dataclass(frozen=True)
+class PricingOutcome:
+    text: str
+    verdict_action: str | None = None
+
+
 class MessageIngestion:
     """Turns an inbound webhook message into persisted state and an outbound reply.
 
     A message that was already processed (same provider message id) is skipped.
     When an intent extractor is configured, the message also refreshes the
-    customer profile and lead score; when a quote service is configured, program
-    computed prices/offer verdicts are handed to the agent as authoritative text.
+    customer profile and lead score; a quote service provides authoritative
+    pricing text; a notifier reports handoffs and high-intent leads.
     """
 
     def __init__(
@@ -41,12 +49,14 @@ class MessageIngestion:
         provider: WhatsAppProvider,
         intent_extractor: IntentExtractor | None = None,
         quote_service: QuoteService | None = None,
+        notifier: Notifier | None = None,
     ) -> None:
         self.session = session
         self._agent = agent
         self._provider = provider
         self._intent_extractor = intent_extractor
         self._quote_service = quote_service
+        self._notifier = notifier
 
     def handle_inbound(self, inbound: InboundMessage) -> HandlingResult:
         existing = self.session.exec(
@@ -84,9 +94,24 @@ class MessageIngestion:
         merged: CustomerIntent | None = None
         if self._intent_extractor is not None:
             merged = self._accumulate_intent(customer, history)
-        pricing_text = self._build_pricing_text(merged, inbound.text)
 
-        reply_text = self._agent.reply(history, customer, pricing_text=pricing_text)
+        if conversation.handler == HANDLER_HUMAN:
+            self._apply_profile_if_needed(customer, merged, history)
+            self._touch(customer, conversation)
+            self.session.commit()
+            return HandlingResult(handled=True, reply_text=None)
+
+        pricing = self._build_pricing(merged, inbound.text)
+        reply_text = self._agent.reply(
+            history, customer, pricing_text=pricing.text if pricing else None
+        )
+
+        signals = HandoffSignals(
+            fell_back=reply_text == self._agent.fallback_reply,
+            need_human=bool(merged and merged.need_human),
+            verdict_human=pricing.verdict_action == "human" if pricing else False,
+        )
+        handoff = should_handoff(signals)
 
         provider_message_id = self._provider.send_message(customer.wa_id, reply_text)
         self.session.add(
@@ -101,17 +126,43 @@ class MessageIngestion:
         if merged is not None:
             inbound_count = sum(1 for m in history if m.role == ROLE_INBOUND)
             self._apply_profile(customer, merged, inbound_count)
-        now = datetime.now(UTC)
-        conversation.last_message_at = now
-        conversation.updated_at = now
-        customer.updated_at = now
+            if self._notifier is not None and customer.lead_level == "high":
+                self._notifier.notify(
+                    NotificationEvent(
+                        kind=KIND_LEAD_HIGH,
+                        wa_id=customer.wa_id,
+                        details=f"lead_score={customer.lead_score}",
+                    )
+                )
+
+        if handoff:
+            conversation.handler = HANDLER_HUMAN
+            if self._notifier is not None:
+                self._notifier.notify(
+                    NotificationEvent(
+                        kind=KIND_HANDOFF,
+                        wa_id=customer.wa_id,
+                        details=f"reason=fell_back:{signals.fell_back},"
+                        f"need_human:{signals.need_human},verdict_human:{signals.verdict_human}",
+                    )
+                )
+
+        self._touch(customer, conversation)
         self.session.commit()
 
         return HandlingResult(handled=True, reply_text=reply_text)
 
-    def _build_pricing_text(
+    def _apply_profile_if_needed(
+        self, customer: Customer, merged: CustomerIntent | None, history: list[Message]
+    ) -> None:
+        if merged is None:
+            return
+        inbound_count = sum(1 for m in history if m.role == ROLE_INBOUND)
+        self._apply_profile(customer, merged, inbound_count)
+
+    def _build_pricing(
         self, merged: CustomerIntent | None, current_text: str
-    ) -> str | None:
+    ) -> PricingOutcome | None:
         if merged is None or self._quote_service is None or not merged.product:
             return None
         product = self.session.exec(
@@ -123,6 +174,7 @@ class MessageIngestion:
         if rule is None:
             return None
 
+        verdict_action: str | None = None
         blocks: list[str] = []
         if merged.need_quote:
             quote = self._quote_service.quote(product, merged.quantity)
@@ -142,6 +194,7 @@ class MessageIngestion:
         offer = extract_offer(current_text)
         if offer is not None:
             verdict = self._quote_service.evaluate_offer(rule, offer)
+            verdict_action = verdict.action
             blocks.append(
                 f"Customer offered {offer:.2f} {rule.currency}. "
                 f"Verdict: {verdict.action}. {verdict.guidance} "
@@ -149,7 +202,7 @@ class MessageIngestion:
             )
         if not blocks:
             return None
-        return "\n".join(blocks)
+        return PricingOutcome(text="\n".join(blocks), verdict_action=verdict_action)
 
     def _apply_profile(
         self, customer: Customer, merged: CustomerIntent, inbound_count: int
@@ -172,6 +225,13 @@ class MessageIngestion:
             intent = self._intent_extractor.extract(message.content, customer)
             merged = merge_intents(merged, intent)
         return merged
+
+    @staticmethod
+    def _touch(customer: Customer, conversation: Conversation) -> None:
+        now = datetime.now(UTC)
+        conversation.last_message_at = now
+        conversation.updated_at = now
+        customer.updated_at = now
 
     def _get_or_create(self, model, conditions: list, **fields):
         obj = self.session.exec(select(model).where(*conditions)).first()

@@ -13,6 +13,7 @@ from .llm.base import LLMProvider
 from .llm.litellm_provider import LiteLLMProvider
 from .messaging.agent import AutoReplyAgent
 from .messaging.language import KeywordLanguageDetector
+from .messaging.notification import LogNotifier, Notifier
 from .rag.embeddings import MockEmbedder
 from .rag.knowledge_base import KnowledgeBase
 from .rag.vectorstore import MockVectorStore
@@ -26,6 +27,7 @@ def create_app(
     llm: LLMProvider | None = None,
     provider: WhatsAppProvider | None = None,
     settings: Settings | None = None,
+    notifier: Notifier | None = None,
 ) -> FastAPI:
     settings = settings or default_settings
     engine = create_engine_for(db_url or settings.database_url)
@@ -69,6 +71,7 @@ def create_app(
     app.state.llm = llm
     app.state.intent_llm_extract = settings.intent_llm_extract
     app.state.provider = provider or MockWhatsAppProvider()
+    app.state.notifier = notifier or LogNotifier()
     app.state.make_kb = make_kb
     app.state.build_agent = build_agent
     app.include_router(webhook.router)
