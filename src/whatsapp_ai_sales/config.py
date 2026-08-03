@@ -24,6 +24,10 @@ class Settings(BaseSettings):
 
     intent_llm_extract: bool = False
 
+    telegram_token: str | None = None
+    telegram_poll_enabled: bool = True
+    telegram_poll_interval: float = 1.0
+
     followup_no_reply_hours: int = 24
     followup_quote_hours: int = 48
     followup_max: int = 2

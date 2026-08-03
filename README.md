@@ -23,9 +23,19 @@ WAS_DATABASE_URL=sqlite:///./was.db
 WAS_LLM_MODEL=deepseek/deepseek-chat
 WAS_LLM_API_KEY=sk-xxx
 WAS_WHATSAPP_VERIFY_TOKEN=verify-me
+WAS_TELEGRAM_TOKEN=123456:ABC...   # 设置后默认出站渠道切到 Telegram 机器人
 ```
 
 未配置 `WAS_LLM_API_KEY` 时用 `MockWhatsAppProvider` 捕获外发消息，可本地联调。启动后访问 `http://localhost:8000/admin` 打开管理后台（客户列表、聊天工作台、报表、知识库、定价录入）。
+
+## Telegram 机器人
+
+`WAS_TELEGRAM_TOKEN` 设置后：
+- 出站渠道切换为 Telegram（`TelegramBot` 实现统一的 `send_message` 接口，chat_id 即客户 wa_id）
+- 应用 lifespan 启动**长轮询** poller，把机器人收到的文字消息喂进同一套 ingestion 管线（AI 回复、意向识别、评分、报价、人工接管全部生效），无需公网 URL
+- 手动触发一次轮询：`POST /api/telegram/poll`（若需）
+
+Telegram API 不可达的网络（如某些区域）需要代理：httpx 默认读 `HTTPS_PROXY` 环境变量，可配合代理访问。
 
 ## 端点
 

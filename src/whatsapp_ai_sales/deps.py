@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, FastAPI, Request
 from sqlmodel import Session
 
 from .messaging.ingestion import MessageIngestion
@@ -24,13 +24,18 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 
 def get_ingestion(request: Request, session: SessionDep) -> MessageIngestion:
+    return build_ingestion(request.app, session)
+
+
+def build_ingestion(app: FastAPI, session: Session) -> MessageIngestion:
+    """Compose the ingestion pipeline from app state (webhook and Telegram both use it)."""
     return MessageIngestion(
         session=session,
-        agent=request.app.state.build_agent(session),
-        provider=request.app.state.provider,
-        intent_extractor=_build_intent_extractor(request, session),
+        agent=app.state.build_agent(session),
+        provider=app.state.provider,
+        intent_extractor=_build_intent_extractor(app, session),
         quote_service=QuoteService(session),
-        notifier=request.app.state.notifier,
+        notifier=app.state.notifier,
     )
 
 
@@ -41,11 +46,11 @@ def get_provider(request: Request) -> WhatsAppProvider:
 ProviderDep = Annotated[WhatsAppProvider, Depends(get_provider)]
 
 
-def _build_intent_extractor(request: Request, session: Session) -> IntentExtractor:
+def _build_intent_extractor(app: FastAPI, session: Session) -> IntentExtractor:
     product_keywords = {}
-    for product in request.app.state.make_kb(session).list_products():
+    for product in app.state.make_kb(session).list_products():
         product_keywords[product.name] = product.name.lower().split()
-    llm = request.app.state.llm if request.app.state.intent_llm_extract else None
+    llm = app.state.llm if app.state.intent_llm_extract else None
     return IntentExtractor(llm, product_keywords=product_keywords)
 
 

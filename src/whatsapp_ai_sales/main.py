@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, SQLModel
 
-from .api import crm, followup, kb, pricing, reports, webhook
+from .api import crm, followup, kb, pricing, reports, telegram, webhook
 from .config import Settings
 from .config import settings as default_settings
 from .db import create_engine_for
@@ -21,6 +21,7 @@ from .messaging.notification import LogNotifier, Notifier
 from .rag.embeddings import MockEmbedder
 from .rag.knowledge_base import KnowledgeBase
 from .rag.vectorstore import MockVectorStore
+from .telegram import runtime as telegram_runtime
 from .whatsapp.base import WhatsAppProvider
 from .whatsapp.mock import MockWhatsAppProvider
 
@@ -42,6 +43,12 @@ def create_app(
         api_key=settings.llm_api_key,
         base_url=settings.llm_base_url,
     )
+    if provider is None:
+        provider = (
+            telegram_runtime.TelegramBot(settings.telegram_token)
+            if settings.telegram_token
+            else MockWhatsAppProvider()
+        )
     embedder = MockEmbedder()
     vector_store = MockVectorStore()
 
@@ -74,6 +81,8 @@ def create_app(
     async def lifespan(app: FastAPI):
         if app.state.settings.followup_scheduler_enabled:
             followup.start_followup_scheduler(app)
+        if telegram_runtime.is_telegram_enabled(app):
+            telegram_runtime.start_telegram_polling(app)
         try:
             yield
         finally:
@@ -96,6 +105,7 @@ def create_app(
     app.include_router(pricing.router)
     app.include_router(followup.router)
     app.include_router(reports.router)
+    app.include_router(telegram.router)
     admin_dir = Path(__file__).parent / "static" / "admin"
     app.mount("/admin", StaticFiles(directory=admin_dir, html=True), name="admin")
     return app
