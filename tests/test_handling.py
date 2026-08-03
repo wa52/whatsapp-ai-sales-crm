@@ -1,5 +1,7 @@
+from fakes import RecordingNotifier
+
 from whatsapp_ai_sales.messaging.handling import HandoffSignals, should_handoff
-from whatsapp_ai_sales.messaging.notification import NotificationEvent, RecordingNotifier
+from whatsapp_ai_sales.messaging.notification import NotificationEvent
 
 
 def test_no_signals_no_handoff() -> None:

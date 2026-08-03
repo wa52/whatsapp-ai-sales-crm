@@ -10,6 +10,10 @@ from sqlmodel import Session, select
 
 from ..models import PriceTier, PricingRule, Product
 
+ACTION_ACCEPT = "accept"
+ACTION_NEGOTIATE = "negotiate"
+ACTION_HUMAN = "human"
+
 _OFFER_SUFFIX_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:usd|dollars|us dollars)", re.IGNORECASE)
 _OFFER_DOLLAR_RE = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
 _OFFER_SIGNAL_RE = re.compile(
@@ -113,7 +117,7 @@ class QuoteService:
     def evaluate_offer(self, rule: PricingRule, offer_unit_price: float) -> OfferVerdict:
         if offer_unit_price >= rule.auto_deal_price:
             return OfferVerdict(
-                action="accept",
+                action=ACTION_ACCEPT,
                 guidance=(
                     f"The offer of {offer_unit_price:.2f} {rule.currency} is acceptable; "
                     "the AI may confirm the deal."
@@ -121,7 +125,7 @@ class QuoteService:
             )
         if offer_unit_price >= rule.min_price:
             return OfferVerdict(
-                action="negotiate",
+                action=ACTION_NEGOTIATE,
                 guidance=(
                     f"The offer of {offer_unit_price:.2f} {rule.currency} is between the "
                     f"minimum ({rule.min_price:.2f}) and the auto-deal price "
@@ -129,7 +133,7 @@ class QuoteService:
                 ),
             )
         return OfferVerdict(
-            action="human",
+            action=ACTION_HUMAN,
             guidance=(
                 f"The offer of {offer_unit_price:.2f} {rule.currency} is below the minimum "
                 "acceptable price; do not accept, route to a salesperson."

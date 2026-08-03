@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import phonenumbers
 from sqlmodel import Session, select
 
-from ..models import ROLE_INBOUND, ROLE_OUTBOUND, Conversation, Customer, Message, Product
-from ..pricing.service import QuoteService, extract_offer
-from ..repos import get_conversation_messages
+from ..models import ROLE_INBOUND, Conversation, Customer, Message, Product
+from ..pricing.service import ACTION_HUMAN, QuoteService, extract_offer
+from ..repos import get_conversation_messages, send_outbound_message, touch
 from ..whatsapp.base import WhatsAppProvider
 from ..whatsapp.webhook import InboundMessage
 from .agent import AutoReplyAgent
-from .handling import HANDLER_HUMAN, HandoffSignals, should_handoff
+from .handling import HANDLER_AI, HANDLER_HUMAN, HandoffSignals, should_handoff
 from .intent import CustomerIntent, IntentExtractor, merge_intents
 from .notification import KIND_HANDOFF, KIND_LEAD_HIGH, NotificationEvent, Notifier
 from .scoring import score_lead
@@ -77,7 +76,7 @@ class MessageIngestion:
             [Conversation.customer_id == customer.id, Conversation.status == "active"],
             customer_id=customer.id,
             status="active",
-            handler="ai",
+            handler=HANDLER_AI,
         )
 
         self.session.add(
@@ -92,12 +91,15 @@ class MessageIngestion:
 
         history = get_conversation_messages(self.session, conversation.id)
         merged: CustomerIntent | None = None
+        current_intent: CustomerIntent | None = None
         if self._intent_extractor is not None:
-            merged = self._accumulate_intent(customer, history)
+            merged, current_intent = self._accumulate_intent(customer, history)
 
         if conversation.handler == HANDLER_HUMAN:
             self._apply_profile_if_needed(customer, merged, history)
-            self._touch(customer, conversation)
+            if self._notifier is not None and customer.lead_level == "high":
+                self._notify_lead_high(customer)
+            touch(conversation, customer)
             self.session.commit()
             return HandlingResult(handled=True, reply_text=None)
 
@@ -107,33 +109,18 @@ class MessageIngestion:
         )
 
         signals = HandoffSignals(
-            fell_back=reply_text == self._agent.fallback_reply,
-            need_human=bool(merged and merged.need_human),
-            verdict_human=pricing.verdict_action == "human" if pricing else False,
+            fell_back=self._agent.is_fallback(reply_text),
+            need_human=bool(current_intent and current_intent.need_human),
+            verdict_human=pricing.verdict_action == ACTION_HUMAN if pricing else False,
         )
         handoff = should_handoff(signals)
 
-        provider_message_id = self._provider.send_message(customer.wa_id, reply_text)
-        self.session.add(
-            Message(
-                conversation_id=conversation.id,
-                role=ROLE_OUTBOUND,
-                provider_message_id=provider_message_id,
-                content=reply_text,
-                status="sent",
-            )
-        )
+        send_outbound_message(self.session, self._provider, conversation, customer, reply_text)
         if merged is not None:
             inbound_count = sum(1 for m in history if m.role == ROLE_INBOUND)
             self._apply_profile(customer, merged, inbound_count)
             if self._notifier is not None and customer.lead_level == "high":
-                self._notifier.notify(
-                    NotificationEvent(
-                        kind=KIND_LEAD_HIGH,
-                        wa_id=customer.wa_id,
-                        details=f"lead_score={customer.lead_score}",
-                    )
-                )
+                self._notify_lead_high(customer)
 
         if handoff:
             conversation.handler = HANDLER_HUMAN
@@ -147,10 +134,19 @@ class MessageIngestion:
                     )
                 )
 
-        self._touch(customer, conversation)
+        touch(conversation, customer)
         self.session.commit()
 
         return HandlingResult(handled=True, reply_text=reply_text)
+
+    def _notify_lead_high(self, customer: Customer) -> None:
+        self._notifier.notify(
+            NotificationEvent(
+                kind=KIND_LEAD_HIGH,
+                wa_id=customer.wa_id,
+                details=f"lead_score={customer.lead_score}",
+            )
+        )
 
     def _apply_profile_if_needed(
         self, customer: Customer, merged: CustomerIntent | None, history: list[Message]
@@ -216,22 +212,23 @@ class MessageIngestion:
         customer.lead_score = lead.score
         customer.lead_level = lead.level
 
-    def _accumulate_intent(self, customer: Customer, history: list[Message]) -> CustomerIntent:
-        """Merge intents across all customer messages so earlier signals persist."""
+    def _accumulate_intent(
+        self, customer: Customer, history: list[Message]
+    ) -> tuple[CustomerIntent, CustomerIntent | None]:
+        """Merge intents across all customer messages so earlier signals persist.
+
+        Returns the merged intent and the intent of the latest inbound message
+        (used for per-turn handoff decisions).
+        """
         merged = CustomerIntent(country=customer.country_code)
+        current: CustomerIntent | None = None
         for message in history:
             if message.role != ROLE_INBOUND:
                 continue
             intent = self._intent_extractor.extract(message.content, customer)
+            current = intent
             merged = merge_intents(merged, intent)
-        return merged
-
-    @staticmethod
-    def _touch(customer: Customer, conversation: Conversation) -> None:
-        now = datetime.now(UTC)
-        conversation.last_message_at = now
-        conversation.updated_at = now
-        customer.updated_at = now
+        return merged, current
 
     def _get_or_create(self, model, conditions: list, **fields):
         obj = self.session.exec(select(model).where(*conditions)).first()

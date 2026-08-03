@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -10,8 +10,8 @@ from sqlmodel import select
 
 from ..deps import ProviderDep, SessionDep
 from ..messaging.handling import HANDLER_AI, HANDLER_HUMAN
-from ..models import ROLE_OUTBOUND, Conversation, Customer, Message
-from ..repos import get_conversation_messages
+from ..models import Conversation, Customer
+from ..repos import get_conversation_messages, send_outbound_message, touch
 
 router = APIRouter(prefix="/api/crm", tags=["crm"])
 
@@ -93,7 +93,7 @@ def takeover(conversation_id: int, session: SessionDep) -> ConversationStateOut:
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     conversation.handler = HANDLER_HUMAN
-    conversation.updated_at = datetime.now(UTC)
+    touch(conversation)
     session.commit()
     return ConversationStateOut(id=conversation.id, handler=conversation.handler)
 
@@ -105,7 +105,7 @@ def release(conversation_id: int, session: SessionDep) -> ConversationStateOut:
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     conversation.handler = HANDLER_AI
-    conversation.updated_at = datetime.now(UTC)
+    touch(conversation)
     session.commit()
     return ConversationStateOut(id=conversation.id, handler=conversation.handler)
 
@@ -129,18 +129,8 @@ def send_manual_message(
     if customer is None:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    provider_message_id = provider.send_message(customer.wa_id, payload.content)
-    message = Message(
-        conversation_id=conversation.id,
-        role=ROLE_OUTBOUND,
-        provider_message_id=provider_message_id,
-        content=payload.content,
-        status="sent",
-    )
-    session.add(message)
-    now = datetime.now(UTC)
-    conversation.last_message_at = now
-    conversation.updated_at = now
+    message = send_outbound_message(session, provider, conversation, customer, payload.content)
+    touch(conversation)
     session.commit()
     return MessageOut(
         id=message.id,

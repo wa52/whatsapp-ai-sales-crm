@@ -35,6 +35,10 @@ class AutoReplyAgent:
         self._retriever = retriever
         self._language_detector = language_detector
 
+    def is_fallback(self, text: str) -> bool:
+        """True when the agent produced its safe fallback instead of a real answer."""
+        return text == self.fallback_reply
+
     def build_context(
         self,
         history: list[Message],

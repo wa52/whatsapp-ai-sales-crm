@@ -1,8 +1,7 @@
-from fakes import FakeLLM
+from fakes import FakeLLM, RecordingNotifier
 from fastapi.testclient import TestClient
 
 from whatsapp_ai_sales.main import create_app
-from whatsapp_ai_sales.messaging.notification import RecordingNotifier
 from whatsapp_ai_sales.whatsapp.mock import MockWhatsAppProvider
 
 RULE = {
@@ -102,6 +101,39 @@ def test_release_restores_ai_reply() -> None:
 
     assert len(llm.calls) == 1
     assert len(provider.sent) >= 1
+
+
+def test_release_does_not_flip_back_from_past_negative_signal() -> None:
+    client, llm, _, _ = _app()
+    client.post("/webhooks/whatsapp", json=_meta("The LED strip is too expensive!"))
+    conversation_id = _conversation_id(client)
+    assert client.get("/api/crm/conversations").json()[0]["handler"] == "human"
+    client.post(f"/api/crm/conversations/{conversation_id}/release")
+    llm.calls.clear()
+
+    client.post(
+        "/webhooks/whatsapp",
+        json=_meta("what is the price of LED strip?", message_id="wamid.2"),
+    )
+
+    assert client.get("/api/crm/conversations").json()[0]["handler"] == "ai"
+    assert len(llm.calls) == 1
+
+
+def test_new_negative_message_after_release_retriggers_handoff() -> None:
+    client, _, _, notifier = _app()
+    client.post("/webhooks/whatsapp", json=_meta("The LED strip is too expensive!"))
+    conversation_id = _conversation_id(client)
+    client.post(f"/api/crm/conversations/{conversation_id}/release")
+
+    client.post(
+        "/webhooks/whatsapp",
+        json=_meta("Still too expensive, I am very unhappy!", message_id="wamid.2"),
+    )
+
+    rows = client.get("/api/crm/conversations").json()
+    assert rows[0]["handler"] == "human"
+    assert [e.kind for e in notifier.events].count("handoff") >= 2
 
 
 def test_manual_message_sends_via_provider() -> None:

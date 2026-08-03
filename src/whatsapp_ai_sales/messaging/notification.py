@@ -24,16 +24,6 @@ class Notifier(Protocol):
         ...
 
 
-class RecordingNotifier:
-    """In-memory notifier that records events for assertions."""
-
-    def __init__(self) -> None:
-        self.events: list[NotificationEvent] = []
-
-    def notify(self, event: NotificationEvent) -> None:
-        self.events.append(event)
-
-
 class LogNotifier:
     """Default notifier: writes events to the application log."""
 

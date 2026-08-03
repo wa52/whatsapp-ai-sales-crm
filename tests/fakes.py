@@ -16,6 +16,14 @@ class FakeLLM:
         return self._content
 
 
+class RecordingNotifier:
+    def __init__(self) -> None:
+        self.events: list = []
+
+    def notify(self, event) -> None:
+        self.events.append(event)
+
+
 class ConditionalLLM:
     """Returns a canned JSON payload for intent-extraction prompts, a plain
     reply otherwise. Lets one instance play both the reply and the extractor."""
