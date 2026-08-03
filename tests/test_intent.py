@@ -79,6 +79,15 @@ class TestRuleExtractor:
         intent = RuleExtractor().extract("What is your best price? cheapest?", _customer())
         assert intent.price_probing is True
 
+    def test_need_human_flag(self) -> None:
+        intent = RuleExtractor().extract("This price is too expensive!", _customer())
+        assert intent.need_human is True
+
+    def test_product_matches_configured_keywords(self) -> None:
+        rules = RuleExtractor(product_keywords={"LED Strip": ["led", "strip"]})
+        intent = rules.extract("How much for LED strip?", _customer())
+        assert intent.product == "LED Strip"
+
     def test_empty_text_yields_defaults(self) -> None:
         intent = RuleExtractor().extract("", _customer())
         assert intent.quantity is None

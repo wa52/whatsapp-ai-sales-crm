@@ -30,7 +30,7 @@ def test_quantity_budget_time_and_logistics_push_to_high() -> None:
 
 def test_incomplete_info_is_penalized() -> None:
     lead = score_lead(_intent(need_quote=True))
-    assert lead.score == 15  # 20 - 5 for missing qty/time/country/product
+    assert lead.score == 15  # 20 - 5 (no quantity/purchase_time)
     assert "信息不完整" in lead.reasons
 
 

@@ -26,8 +26,16 @@ def get_ingestion(request: Request, session: SessionDep) -> MessageIngestion:
         session=session,
         agent=request.app.state.build_agent(session),
         provider=request.app.state.provider,
-        intent_extractor=IntentExtractor(),
+        intent_extractor=_build_intent_extractor(request, session),
     )
+
+
+def _build_intent_extractor(request: Request, session: Session) -> IntentExtractor:
+    product_keywords = {}
+    for product in request.app.state.make_kb(session).list_products():
+        product_keywords[product.name] = product.name.lower().split()
+    llm = request.app.state.llm if request.app.state.intent_llm_extract else None
+    return IntentExtractor(llm, product_keywords=product_keywords)
 
 
 IngestionDep = Annotated[MessageIngestion, Depends(get_ingestion)]

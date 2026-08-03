@@ -66,6 +66,8 @@ def create_app(
 
     app = FastAPI(title="WhatsApp AI Sales")
     app.state.engine = engine
+    app.state.llm = llm
+    app.state.intent_llm_extract = settings.intent_llm_extract
     app.state.provider = provider or MockWhatsAppProvider()
     app.state.make_kb = make_kb
     app.state.build_agent = build_agent

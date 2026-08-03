@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .intent import CustomerIntent
+from .intent import INTENT_ORDER, INTENT_PRICE_INQUIRY, CustomerIntent
 
 HIGH_THRESHOLD = 70
 MEDIUM_THRESHOLD = 40
+
+LEVEL_HIGH = "high"
+LEVEL_MEDIUM = "medium"
+LEVEL_LOW = "low"
 
 
 @dataclass(frozen=True)
@@ -26,7 +30,7 @@ def score_lead(intent: CustomerIntent, *, message_count: int = 0) -> LeadScore:
     score = 0
     reasons: list[str] = []
 
-    is_inquiry = intent.need_quote or intent.intent_type in ("price_inquiry", "order")
+    is_inquiry = intent.need_quote or intent.intent_type in (INTENT_PRICE_INQUIRY, INTENT_ORDER)
     if is_inquiry:
         score += 20
         reasons.append("明确询价")
@@ -59,9 +63,9 @@ def score_lead(intent: CustomerIntent, *, message_count: int = 0) -> LeadScore:
 
     score = max(0, min(100, score))
     if score >= HIGH_THRESHOLD:
-        level = "high"
+        level = LEVEL_HIGH
     elif score >= MEDIUM_THRESHOLD:
-        level = "medium"
+        level = LEVEL_MEDIUM
     else:
-        level = "low"
+        level = LEVEL_LOW
     return LeadScore(score=score, level=level, reasons=tuple(reasons))

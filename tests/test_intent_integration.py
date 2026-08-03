@@ -1,6 +1,7 @@
-from fakes import FakeLLM
+from fakes import ConditionalLLM, FakeLLM
 from fastapi.testclient import TestClient
 
+from whatsapp_ai_sales.config import Settings
 from whatsapp_ai_sales.main import create_app
 from whatsapp_ai_sales.whatsapp.mock import MockWhatsAppProvider
 
@@ -95,3 +96,31 @@ def test_reply_frequency_raises_score() -> None:
     rows = client.get("/api/crm/conversations").json()
     assert rows[0]["lead_score"] == 25  # 20 quote + 10 (3 replies) - 5 (no qty/time)
     assert rows[0]["lead_level"] == "low"
+
+
+def test_kb_product_name_populates_interested_product() -> None:
+    client, _ = _client()
+    client.post(
+        "/api/kb/products", json={"name": "LED Strip", "sections": {"intro": "A light strip."}}
+    )
+
+    client.post("/webhooks/whatsapp", json=_meta("How much for LED strip?"))
+
+    rows = client.get("/api/crm/conversations").json()
+    assert rows[0]["interested_product"] == "LED Strip"
+
+
+def test_llm_intent_extraction_used_when_enabled() -> None:
+    llm = ConditionalLLM(reply="ok", json_payload={"need_quote": True, "quantity": 42})
+    settings = Settings(intent_llm_extract=True, fallback_reply="FALLBACK")
+    provider = MockWhatsAppProvider()
+    app = create_app(db_url="sqlite://", llm=llm, provider=provider, settings=settings)
+    client = TestClient(app)
+
+    client.post("/webhooks/whatsapp", json=_meta("hello"))
+
+    rows = client.get("/api/crm/conversations").json()
+    # reply path had no knowledge so it fell back; the extractor used the LLM JSON
+    assert provider.sent[0].text == "FALLBACK"
+    assert rows[0]["lead_score"] == 35  # quote 20 + quantity 15
+    assert len(llm.calls) == 1

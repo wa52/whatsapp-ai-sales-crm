@@ -11,6 +11,10 @@ from pydantic import BaseModel, Field
 from ..llm.base import ChatMessage
 from ..models import Customer
 
+INTENT_PRICE_INQUIRY = "price_inquiry"
+INTENT_ORDER = "order"
+INTENT_SAMPLE_REQUEST = "sample_request"
+
 
 class CustomerIntent(BaseModel):
     """Structured intent extracted from a customer message."""
@@ -62,7 +66,11 @@ _LOGISTICS_WORDS = (
 )
 _ORDER_WORDS = ("order", "buy", "purchase", "采购", "下单", "bestellen", "commander")
 _PROBE_WORDS = ("best price", "lowest price", "cheapest", "最低价", "最便宜")
-_COUNTRY_ALIASES: dict[str, str] = {}
+_HUMAN_WORDS = ("too expensive", "complaint", "upset", "refund", "投诉", "太贵", "不满意")
+
+
+def _has_any(lowered: str, words: tuple[str, ...]) -> bool:
+    return any(word in lowered for word in words)
 
 
 class RuleExtractor:
@@ -75,12 +83,13 @@ class RuleExtractor:
         lowered = text.lower()
         intent = CustomerIntent(
             country=customer.country_code if customer else None,
-            need_quote=any(w in lowered for w in _QUOTE_WORDS),
-            need_sample=any(w in lowered for w in _SAMPLE_WORDS),
-            need_catalog=any(w in lowered for w in _CATALOG_WORDS),
-            payment_question=any(w in lowered for w in _PAYMENT_WORDS),
-            logistics_question=any(w in lowered for w in _LOGISTICS_WORDS),
-            price_probing=any(w in lowered for w in _PROBE_WORDS),
+            need_quote=_has_any(lowered, _QUOTE_WORDS),
+            need_sample=_has_any(lowered, _SAMPLE_WORDS),
+            need_catalog=_has_any(lowered, _CATALOG_WORDS),
+            payment_question=_has_any(lowered, _PAYMENT_WORDS),
+            logistics_question=_has_any(lowered, _LOGISTICS_WORDS),
+            need_human=_has_any(lowered, _HUMAN_WORDS),
+            price_probing=_has_any(lowered, _PROBE_WORDS),
         )
 
         quantity = self._match_quantity(lowered)
@@ -94,11 +103,11 @@ class RuleExtractor:
         time_match = _TIME_RE.search(lowered)
         if time_match:
             intent.purchase_time = f"within {time_match.group(1)} {time_match.group(2)}"
-        elif any(w in lowered for w in ("asap", "immediately", "尽快", "立即")):
+        elif _has_any(lowered, ("asap", "immediately", "尽快", "立即")):
             intent.purchase_time = "immediately"
-        elif "this month" in lowered or "本月" in text:
+        elif "this month" in lowered or "本月" in lowered:
             intent.purchase_time = "this month"
-        elif "next month" in lowered or "下月" in text:
+        elif "next month" in lowered or "下月" in lowered:
             intent.purchase_time = "next month"
 
         customer_type = self._match_customer_type(lowered)
@@ -109,14 +118,14 @@ class RuleExtractor:
         if product:
             intent.product = product
 
-        if intent.need_quote and any(w in lowered for w in _ORDER_WORDS):
-            intent.intent_type = "order"
+        if intent.need_quote and _has_any(lowered, _ORDER_WORDS):
+            intent.intent_type = INTENT_ORDER
         elif intent.need_quote:
-            intent.intent_type = "price_inquiry"
-        elif any(w in lowered for w in _ORDER_WORDS):
-            intent.intent_type = "order"
+            intent.intent_type = INTENT_PRICE_INQUIRY
+        elif _has_any(lowered, _ORDER_WORDS):
+            intent.intent_type = INTENT_ORDER
         elif intent.need_sample:
-            intent.intent_type = "sample_request"
+            intent.intent_type = INTENT_SAMPLE_REQUEST
 
         return intent
 
@@ -181,13 +190,19 @@ class IntentExtractor:
     def extract(self, text: str, customer: Customer | None) -> CustomerIntent:
         if self._llm is not None:
             try:
+                context = text
+                if customer is not None and customer.country_code:
+                    context += f"\nCustomer country: {customer.country_code}"
                 raw = self._llm.chat(
                     [
                         {"role": "user", "content": _INTENT_PROMPT},
-                        {"role": "user", "content": text},
+                        {"role": "user", "content": context},
                     ]
                 )
-                return CustomerIntent.model_validate(json.loads(raw))
+                intent = CustomerIntent.model_validate(json.loads(raw))
+                if intent.country is None and customer is not None:
+                    intent.country = customer.country_code
+                return intent
             except (json.JSONDecodeError, ValueError):
                 pass
         return self._rules.extract(text, customer)

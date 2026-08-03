@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     chunk_max_chars: int = 500
     chunk_overlap: int = 50
 
+    intent_llm_extract: bool = False
+
     fallback_reply: str = (
         "Thank you for your message. I need to confirm this with our sales team "
         "and will get back to you shortly."

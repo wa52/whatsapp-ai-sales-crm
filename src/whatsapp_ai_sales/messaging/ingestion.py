@@ -101,11 +101,11 @@ class MessageIngestion:
 
     def _update_profile(self, customer: Customer, history: list[Message]) -> None:
         merged = self._accumulate_intent(customer, history)
-        customer.interested_product = merged.product or customer.interested_product
-        customer.quantity = merged.quantity or customer.quantity
-        customer.budget = merged.budget or customer.budget
-        customer.purchase_time = merged.purchase_time or customer.purchase_time
-        customer.customer_type = merged.customer_type or customer.customer_type
+        customer.interested_product = merged.product
+        customer.quantity = merged.quantity
+        customer.budget = merged.budget
+        customer.purchase_time = merged.purchase_time
+        customer.customer_type = merged.customer_type
         inbound_count = sum(1 for m in history if m.role == ROLE_INBOUND)
         lead = score_lead(merged, message_count=inbound_count)
         customer.lead_score = lead.score
