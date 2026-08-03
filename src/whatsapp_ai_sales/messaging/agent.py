@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..llm.base import ChatMessage, LLMProvider
 from ..models import ROLE_INBOUND, Customer, KnowledgeChunk, Message
 from ..rag.retriever import Retriever
+from .language import LanguageDetector
 
 _ROLE_MAP = {ROLE_INBOUND: "user", "outbound": "assistant"}
 
@@ -25,18 +26,21 @@ class AutoReplyAgent:
         fallback_reply: str,
         window: int = 10,
         retriever: Retriever | None = None,
+        language_detector: LanguageDetector | None = None,
     ) -> None:
         self._llm = llm_provider
         self._system_prompt = system_prompt
         self._fallback_reply = fallback_reply
         self._window = window
         self._retriever = retriever
+        self._language_detector = language_detector
 
     def build_context(
         self,
         history: list[Message],
         customer: Customer | None,
         knowledge: list[KnowledgeChunk] | None = None,
+        language: str | None = None,
     ) -> list[ChatMessage]:
         system = self._system_prompt
         if customer is not None:
@@ -50,6 +54,8 @@ class AutoReplyAgent:
         if knowledge:
             lines = "\n".join(f"- [{c.section}] {c.content}" for c in knowledge)
             system += f"\n\nProduct knowledge:\n{lines}"
+        if language:
+            system += f"\nReply in language: {language}."
 
         turns: list[ChatMessage] = [{"role": "system", "content": system}]
         for message in _last_turns(history, self._window):
@@ -62,16 +68,21 @@ class AutoReplyAgent:
         if not history:
             return self._fallback_reply
 
+        query = next(
+            (m.content for m in reversed(history) if m.role == ROLE_INBOUND), None
+        )
+
+        language: str | None = None
+        if self._language_detector is not None and query:
+            language = self._language_detector.detect(query)
+
         knowledge: list[KnowledgeChunk] | None = None
         if self._retriever is not None:
-            query = next(
-                (m.content for m in reversed(history) if m.role == ROLE_INBOUND), None
-            )
             knowledge = self._retriever.retrieve(query) if query else []
             if not knowledge:
                 return self._fallback_reply
 
-        context = self.build_context(history, customer, knowledge)
+        context = self.build_context(history, customer, knowledge, language)
         try:
             return self._llm.chat(context)
         except Exception:

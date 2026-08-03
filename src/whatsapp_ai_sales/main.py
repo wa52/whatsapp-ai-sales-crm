@@ -12,6 +12,7 @@ from .db import create_engine_for
 from .llm.base import LLMProvider
 from .llm.litellm_provider import LiteLLMProvider
 from .messaging.agent import AutoReplyAgent
+from .messaging.language import KeywordLanguageDetector
 from .rag.embeddings import MockEmbedder
 from .rag.knowledge_base import KnowledgeBase
 from .rag.vectorstore import MockVectorStore
@@ -57,6 +58,7 @@ def create_app(
             fallback_reply=settings.fallback_reply,
             window=settings.reply_window,
             retriever=retriever,
+            language_detector=KeywordLanguageDetector(),
         )
 
     with Session(engine) as session:
