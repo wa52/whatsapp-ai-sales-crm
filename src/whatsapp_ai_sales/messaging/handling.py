@@ -18,6 +18,7 @@ class HandoffSignals:
 
 
 def should_handoff(signals: HandoffSignals) -> bool:
-    """True when the AI cannot carry the conversation alone: it could not answer,
-    the customer is negative/upset, or the offer fell below the floor."""
-    return signals.fell_back or signals.need_human or signals.verdict_human
+    """True when a human must take over: a negative/upset customer or an offer
+    below the floor. An unanswered question (fallback) alone no longer hands the
+    conversation over — the AI keeps answering and sales is notified instead."""
+    return signals.need_human or signals.verdict_human

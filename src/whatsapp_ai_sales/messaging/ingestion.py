@@ -22,10 +22,22 @@ from ..repos import get_conversation_messages, touch
 from ..whatsapp.base import WhatsAppProvider
 from ..whatsapp.webhook import InboundMessage
 from .agent import AutoReplyAgent
-from .audit import AUDIT_HANDOFF, AUDIT_LEAD_HIGH, AUDIT_OUTBOUND_FAILED, AuditLogger
+from .audit import (
+    AUDIT_HANDOFF,
+    AUDIT_LEAD_HIGH,
+    AUDIT_OUTBOUND_FAILED,
+    AUDIT_UNANSWERED,
+    AuditLogger,
+)
 from .handling import HANDLER_AI, HANDLER_HUMAN, HandoffSignals, should_handoff
 from .intent import CustomerIntent, IntentExtractor, merge_intents
-from .notification import KIND_HANDOFF, KIND_LEAD_HIGH, NotificationEvent, Notifier
+from .notification import (
+    KIND_HANDOFF,
+    KIND_LEAD_HIGH,
+    KIND_UNANSWERED,
+    NotificationEvent,
+    Notifier,
+)
 from .outbound import send_with_retry
 from .scoring import score_lead
 
@@ -167,6 +179,14 @@ class MessageIngestion:
                 wa_id=customer.wa_id,
                 details=f"reason=fell_back:{signals.fell_back},"
                 f"need_human:{signals.need_human},verdict_human:{signals.verdict_human}",
+            )
+        elif signals.fell_back:
+            # Could not answer but no human takeover needed: alert sales, keep AI.
+            self._emit(
+                kind=AUDIT_UNANSWERED,
+                event_kind=KIND_UNANSWERED,
+                wa_id=customer.wa_id,
+                details="agent could not answer from the knowledge base",
             )
 
         touch(conversation, customer)

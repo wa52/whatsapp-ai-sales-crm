@@ -8,8 +8,8 @@ def test_no_signals_no_handoff() -> None:
     assert should_handoff(HandoffSignals()) is False
 
 
-def test_fall_back_triggers_handoff() -> None:
-    assert should_handoff(HandoffSignals(fell_back=True)) is True
+def test_fall_back_alone_no_longer_hands_off() -> None:
+    assert should_handoff(HandoffSignals(fell_back=True)) is False
 
 
 def test_need_human_triggers_handoff() -> None:

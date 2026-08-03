@@ -120,6 +120,23 @@ def test_release_does_not_flip_back_from_past_negative_signal() -> None:
     assert len(llm.calls) == 1
 
 
+def test_fallback_keeps_ai_but_notifies_sales() -> None:
+    client, llm, provider, notifier = _app()
+    client.post("/api/kb/products", json={"name": "Other", "sections": {"intro": "x"}})
+
+    # question with no knowledge match and no negative words -> fallback
+    client.post(
+        "/webhooks/whatsapp",
+        json=_meta("do you sell red color version?"),
+    )
+
+    rows = client.get("/api/crm/conversations").json()
+    assert rows[0]["handler"] == "ai"  # NOT handed off
+    kinds = [e.kind for e in notifier.events]
+    assert "unanswered" in kinds
+    assert "handoff" not in kinds
+
+
 def test_new_negative_message_after_release_retriggers_handoff() -> None:
     client, _, _, notifier = _app()
     client.post("/webhooks/whatsapp", json=_meta("The LED strip is too expensive!"))

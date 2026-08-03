@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 AUDIT_HANDOFF = "handoff"
 AUDIT_LEAD_HIGH = "lead_high"
+AUDIT_UNANSWERED = "unanswered"
 AUDIT_TAKEOVER = "takeover"
 AUDIT_RELEASE = "release"
 AUDIT_MANUAL_MESSAGE = "manual_message"

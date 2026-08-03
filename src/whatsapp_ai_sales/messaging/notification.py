@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 KIND_HANDOFF = "handoff"
 KIND_LEAD_HIGH = "lead_high"
+KIND_UNANSWERED = "unanswered"
 
 
 @dataclass(frozen=True)
