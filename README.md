@@ -25,7 +25,7 @@ WAS_LLM_API_KEY=sk-xxx
 WAS_WHATSAPP_VERIFY_TOKEN=verify-me
 ```
 
-未配置 `WAS_LLM_API_KEY` 时用 `MockWhatsAppProvider` 捕获外发消息，可本地联调。
+未配置 `WAS_LLM_API_KEY` 时用 `MockWhatsAppProvider` 捕获外发消息，可本地联调。启动后访问 `http://localhost:8000/admin` 打开管理后台（客户列表、聊天工作台、报表、知识库、定价录入）。
 
 ## 端点
 
@@ -46,6 +46,8 @@ WAS_WHATSAPP_VERIFY_TOKEN=verify-me
 | GET | `/api/pricing/products/{id}/rule` | 读取定价规则 |
 | POST | `/api/crm/conversations/{id}/dnd` | 免打扰（暂停自动回复与跟进） |
 | POST | `/api/followups/run` | 手动触发一次跟进扫描 |
+| GET | `/api/reports/summary` | CRM 报表汇总 |
+| GET | `/admin` | 管理后台前端（免构建 SPA） |
 
 ## 知识库录入示例
 

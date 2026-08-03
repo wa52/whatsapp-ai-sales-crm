@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WhatsApp AI Sales</title>
+  <link rel="stylesheet" href="/admin/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>WhatsApp AI Sales</h1>
+    <nav>
+      <button data-view="conversations" class="active">客户</button>
+      <button data-view="reports">报表</button>
+      <button data-view="kb">知识库</button>
+      <button data-view="pricing">定价</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-conversations" class="view active">
+      <div class="split">
+        <aside id="conv-list" class="panel"></aside>
+        <section id="chat" class="panel">
+          <div class="chat-placeholder">选择左侧会话查看聊天记录</div>
+        </section>
+      </div>
+    </section>
+
+    <section id="view-reports" class="view">
+      <div id="report-cards" class="cards"></div>
+      <h3>国家分布</h3>
+      <div id="report-countries" class="cards"></div>
+    </section>
+
+    <section id="view-kb" class="view">
+      <form id="kb-form" class="form">
+        <h3>录入产品知识</h3>
+        <input name="name" placeholder="产品名称" required />
+        <input name="sku" placeholder="SKU（可选）" />
+        <textarea name="sections" rows="8" placeholder='JSON sections，如 {"moq": "MOQ 100 pcs", "price": "1-99: $10"}'>{"moq": "MOQ is 100 pieces, lead time 15 days.", "intro": "SMD2835 LED strip, 5m reel."}</textarea>
+        <button type="submit">保存</button>
+        <span id="kb-result"></span>
+      </form>
+    </section>
+
+    <section id="view-pricing" class="view">
+      <form id="pricing-form" class="form">
+        <h3>设置定价规则</h3>
+        <label>产品 <select id="pricing-product"></select></label>
+        <input name="standard_price" type="number" step="0.01" placeholder="标准单价" required />
+        <input name="min_price" type="number" step="0.01" placeholder="最低可接受价" required />
+        <input name="auto_deal_price" type="number" step="0.01" placeholder="自动成交价" required />
+        <input name="tiers" placeholder="阶梯价 JSON，如 [{min_quantity:100, unit_price:8}]" />
+        <button type="submit">保存</button>
+        <span id="pricing-result"></span>
+      </form>
+    </section>
+  </main>
+
+  <script src="/admin/app.js"></script>
+</body>
+</html>

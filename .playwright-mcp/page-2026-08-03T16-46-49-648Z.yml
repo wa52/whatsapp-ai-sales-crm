@@ -1,0 +1,27 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - heading "WhatsApp AI Sales" [level=1] [ref=e3]
+    - navigation [ref=e4]:
+      - button "客户" [ref=e5] [cursor=pointer]
+      - button "报表" [ref=e6] [cursor=pointer]
+      - button "知识库" [ref=e7] [cursor=pointer]
+      - button "定价" [ref=e8] [cursor=pointer]
+  - main [ref=e9]:
+    - generic [ref=e11]:
+      - complementary [ref=e12]:
+        - button "4912345678 John Doe [low:35] · human" [ref=e13] [cursor=pointer]
+      - generic [ref=e14]:
+        - generic [ref=e28]:
+          - strong [ref=e29]: "4912345678"
+          - text: "· handler: human · 产品: LED Strip"
+          - generic [ref=e30]:
+            - button "接管" [ref=e31] [cursor=pointer]
+            - button "交还AI" [ref=e32] [cursor=pointer]
+            - button "免打扰" [ref=e33] [cursor=pointer]
+        - generic [ref=e34]:
+          - generic [ref=e35]: I need 500 pcs of LED strip, what is the price?
+          - generic [ref=e36]: Thank you for your message. I need to confirm this with our sales team and will get back to you shortly.
+          - generic [ref=e37]: Hello! This is our sales rep, how can I help?
+        - generic [ref=e38]:
+          - textbox "人工回复…" [ref=e39]
+          - button "发送" [ref=e40] [cursor=pointer]

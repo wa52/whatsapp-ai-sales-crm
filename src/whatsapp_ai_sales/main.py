@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, SQLModel
 
-from .api import crm, followup, kb, pricing, webhook
+from .api import crm, followup, kb, pricing, reports, webhook
 from .config import Settings
 from .config import settings as default_settings
 from .db import create_engine_for
@@ -93,6 +95,9 @@ def create_app(
     app.include_router(kb.router)
     app.include_router(pricing.router)
     app.include_router(followup.router)
+    app.include_router(reports.router)
+    admin_dir = Path(__file__).parent / "static" / "admin"
+    app.mount("/admin", StaticFiles(directory=admin_dir, html=True), name="admin")
     return app
 
 

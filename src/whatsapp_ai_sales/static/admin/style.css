@@ -1,0 +1,33 @@
+* { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; margin: 0; background: #f5f6f8; color: #222; }
+.topbar { display: flex; align-items: center; gap: 24px; padding: 12px 20px; background: #1d232b; color: #fff; }
+.topbar h1 { font-size: 18px; margin: 0; }
+nav button { background: none; border: none; color: #cbd2da; padding: 6px 12px; cursor: pointer; font-size: 14px; }
+nav button.active { color: #fff; border-bottom: 2px solid #4c8bf5; }
+main { padding: 20px; }
+.view { display: none; }
+.view.active { display: block; }
+
+.split { display: grid; grid-template-columns: 320px 1fr; gap: 16px; height: calc(100vh - 120px); }
+.panel { background: #fff; border: 1px solid #e2e5ea; border-radius: 8px; overflow: auto; }
+.conv-item { display: block; width: 100%; text-align: left; padding: 10px 12px; border: none; border-bottom: 1px solid #eef0f3; background: none; cursor: pointer; font-size: 13px; }
+.conv-item.selected { background: #e8f1ff; }
+.chat-header { padding: 10px 14px; border-bottom: 1px solid #eef0f3; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.chat-actions button { margin-left: 6px; padding: 4px 10px; cursor: pointer; }
+.chat-log { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.msg { max-width: 75%; padding: 8px 12px; border-radius: 10px; font-size: 14px; white-space: pre-wrap; }
+.msg.inbound { align-self: flex-start; background: #eef0f3; }
+.msg.outbound { align-self: flex-end; background: #4c8bf5; color: #fff; }
+.chat-placeholder { padding: 24px; color: #888; }
+.composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #eef0f3; }
+.composer input { flex: 1; padding: 8px; border: 1px solid #d8dce1; border-radius: 6px; }
+.composer button { padding: 8px 16px; cursor: pointer; }
+
+.cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.card { background: #fff; border: 1px solid #e2e5ea; border-radius: 8px; padding: 16px 20px; min-width: 120px; }
+.card-value { font-size: 26px; font-weight: 600; }
+.card-label { color: #6a7280; font-size: 13px; }
+
+.form { background: #fff; border: 1px solid #e2e5ea; border-radius: 8px; padding: 20px; max-width: 560px; display: flex; flex-direction: column; gap: 10px; }
+.form input, .form textarea, .form select { padding: 8px; border: 1px solid #d8dce1; border-radius: 6px; font-family: inherit; }
+.form button { padding: 8px 16px; cursor: pointer; align-self: flex-start; }
