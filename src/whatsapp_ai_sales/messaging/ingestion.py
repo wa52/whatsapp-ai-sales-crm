@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 import phonenumbers
 from sqlmodel import Session, select
 
-from ..models import ROLE_INBOUND, ROLE_OUTBOUND, Conversation, Customer, Message
+from ..models import ROLE_INBOUND, ROLE_OUTBOUND, Conversation, Customer, Message, Product
+from ..pricing.service import QuoteService
 from ..repos import get_conversation_messages
 from ..whatsapp.base import WhatsAppProvider
 from ..whatsapp.webhook import InboundMessage
@@ -28,7 +29,8 @@ class MessageIngestion:
 
     A message that was already processed (same provider message id) is skipped.
     When an intent extractor is configured, the message also refreshes the
-    customer profile and lead score.
+    customer profile and lead score; when a quote service is configured, program
+    computed prices/offer verdicts are handed to the agent as authoritative text.
     """
 
     def __init__(
@@ -38,11 +40,13 @@ class MessageIngestion:
         agent: AutoReplyAgent,
         provider: WhatsAppProvider,
         intent_extractor: IntentExtractor | None = None,
+        quote_service: QuoteService | None = None,
     ) -> None:
         self.session = session
         self._agent = agent
         self._provider = provider
         self._intent_extractor = intent_extractor
+        self._quote_service = quote_service
 
     def handle_inbound(self, inbound: InboundMessage) -> HandlingResult:
         existing = self.session.exec(
@@ -77,7 +81,12 @@ class MessageIngestion:
         self.session.flush()
 
         history = get_conversation_messages(self.session, conversation.id)
-        reply_text = self._agent.reply(history, customer)
+        merged: CustomerIntent | None = None
+        if self._intent_extractor is not None:
+            merged = self._accumulate_intent(customer, history)
+        pricing_text = self._build_pricing_text(merged, inbound.text)
+
+        reply_text = self._agent.reply(history, customer, pricing_text=pricing_text)
 
         provider_message_id = self._provider.send_message(customer.wa_id, reply_text)
         self.session.add(
@@ -89,8 +98,9 @@ class MessageIngestion:
                 status="sent",
             )
         )
-        if self._intent_extractor is not None:
-            self._update_profile(customer, history)
+        if merged is not None:
+            inbound_count = sum(1 for m in history if m.role == ROLE_INBOUND)
+            self._apply_profile(customer, merged, inbound_count)
         now = datetime.now(UTC)
         conversation.last_message_at = now
         conversation.updated_at = now
@@ -99,14 +109,46 @@ class MessageIngestion:
 
         return HandlingResult(handled=True, reply_text=reply_text)
 
-    def _update_profile(self, customer: Customer, history: list[Message]) -> None:
-        merged = self._accumulate_intent(customer, history)
+    def _build_pricing_text(
+        self, merged: CustomerIntent | None, current_text: str
+    ) -> str | None:
+        if merged is None or self._quote_service is None or not merged.product:
+            return None
+        product = self.session.exec(
+            select(Product).where(Product.name == merged.product)
+        ).first()
+        if product is None:
+            return None
+        rule = self._quote_service.get_rule(product.id)
+        if rule is None:
+            return None
+
+        offer = self._quote_service.offer_from_text(current_text)
+        if offer is not None:
+            verdict = self._quote_service.evaluate_offer(rule, offer)
+            return (
+                f"Customer offered {offer:.2f} {rule.currency}. "
+                f"Verdict: {verdict.action}. {verdict.guidance}"
+            )
+        if merged.need_quote:
+            quote = self._quote_service.quote(product, merged.quantity)
+            if quote is not None:
+                quantity = quote.quantity or 1
+                return (
+                    f"Authoritative price: {quote.unit_price:.2f} {quote.currency}/unit, "
+                    f"total {quote.total_price:.2f} {quote.currency} for {quantity} units. "
+                    "Reply with exactly this; never change the numbers."
+                )
+        return None
+
+    def _apply_profile(
+        self, customer: Customer, merged: CustomerIntent, inbound_count: int
+    ) -> None:
         customer.interested_product = merged.product
         customer.quantity = merged.quantity
         customer.budget = merged.budget
         customer.purchase_time = merged.purchase_time
         customer.customer_type = merged.customer_type
-        inbound_count = sum(1 for m in history if m.role == ROLE_INBOUND)
         lead = score_lead(merged, message_count=inbound_count)
         customer.lead_score = lead.score
         customer.lead_level = lead.level

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from sqlmodel import Session, SQLModel
 
-from .api import crm, kb, webhook
+from .api import crm, kb, pricing, webhook
 from .config import Settings
 from .config import settings as default_settings
 from .db import create_engine_for
@@ -74,6 +74,7 @@ def create_app(
     app.include_router(webhook.router)
     app.include_router(crm.router)
     app.include_router(kb.router)
+    app.include_router(pricing.router)
     return app
 
 

@@ -10,6 +10,7 @@ from sqlmodel import Session
 
 from .messaging.ingestion import MessageIngestion
 from .messaging.intent import IntentExtractor
+from .pricing.service import QuoteService
 from .rag.knowledge_base import KnowledgeBase
 
 
@@ -27,6 +28,7 @@ def get_ingestion(request: Request, session: SessionDep) -> MessageIngestion:
         agent=request.app.state.build_agent(session),
         provider=request.app.state.provider,
         intent_extractor=_build_intent_extractor(request, session),
+        quote_service=QuoteService(session),
     )
 
 

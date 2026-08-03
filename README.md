@@ -39,6 +39,8 @@ WAS_WHATSAPP_VERIFY_TOKEN=verify-me
 | GET | `/api/kb/products` | 产品列表 |
 | DELETE | `/api/kb/products/{id}` | 删除产品（同步清理向量） |
 | POST | `/api/kb/reindex` | 从 DB 重建向量索引 |
+| POST | `/api/pricing/products/{id}/rule` | 录入/更新产品定价规则（阶梯价/最低价/自动成交价） |
+| GET | `/api/pricing/products/{id}/rule` | 读取定价规则 |
 
 ## 知识库录入示例
 
@@ -55,6 +57,28 @@ POST /api/kb/products
   }
 }
 ```
+
+## 报价规则示例
+
+价格由程序计算，AI 只负责组织语言、不允许改数字：
+
+```json
+POST /api/pricing/products/1/rule
+{
+  "currency": "USD",
+  "standard_price": 10.0,
+  "min_price": 6.0,
+  "auto_deal_price": 6.5,
+  "sample_price": 15.0,
+  "discount_allowed": true,
+  "tiers": [
+    {"min_quantity": 100, "unit_price": 8.0},
+    {"min_quantity": 500, "unit_price": 6.5}
+  ]
+}
+```
+
+还价分支：报价 ≥ 自动成交价 → accept（可成交）；最低价 ≤ 报价 < 自动成交价 → negotiate（谨慎还价/通知销售）；< 最低价 → human（转人工）。
 
 ## 测试
 

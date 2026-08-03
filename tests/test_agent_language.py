@@ -93,6 +93,21 @@ def test_no_instruction_without_detector() -> None:
     assert "Reply in language" not in system
 
 
+def test_pricing_text_appended_to_system_prompt() -> None:
+    llm = FakeLLM(content="The unit price is 6.50 USD.")
+    agent = AutoReplyAgent(llm, system_prompt=SYSTEM_PROMPT, fallback_reply=FALLBACK)
+
+    result = agent.reply(
+        [_message("inbound", "what is the price?")],
+        None,
+        pricing_text="Authoritative price: 6.50 USD/unit, total 3250.00 USD for 500 units.",
+    )
+
+    assert result == "The unit price is 6.50 USD."
+    system = llm.calls[0][0]["content"]
+    assert "Authoritative price: 6.50 USD/unit" in system
+
+
 META_FR = {
     "object": "whatsapp_business_account",
     "entry": [

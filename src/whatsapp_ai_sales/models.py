@@ -74,3 +74,25 @@ class KnowledgeChunk(SQLModel, table=True):
     section: str = Field(index=True)
     content: str
     created_at: datetime = Field(default_factory=_now)
+
+
+class PricingRule(SQLModel, table=True):
+    """Program-authoritative pricing for one product (LLM never computes these)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    product_id: int = Field(foreign_key="product.id", unique=True, index=True)
+    currency: str = "USD"
+    standard_price: float
+    min_price: float
+    auto_deal_price: float
+    sample_price: float | None = None
+    discount_allowed: bool = True
+
+
+class PriceTier(SQLModel, table=True):
+    """Quantity-tier unit pricing belonging to a pricing rule."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    rule_id: int = Field(foreign_key="pricingrule.id", index=True)
+    min_quantity: int
+    unit_price: float

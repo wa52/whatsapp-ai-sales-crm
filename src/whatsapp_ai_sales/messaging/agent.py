@@ -41,6 +41,7 @@ class AutoReplyAgent:
         customer: Customer | None,
         knowledge: list[KnowledgeChunk] | None = None,
         language: str | None = None,
+        pricing_text: str | None = None,
     ) -> list[ChatMessage]:
         system = self._system_prompt
         if customer is not None:
@@ -54,6 +55,8 @@ class AutoReplyAgent:
         if knowledge:
             lines = "\n".join(f"- [{c.section}] {c.content}" for c in knowledge)
             system += f"\n\nProduct knowledge:\n{lines}"
+        if pricing_text:
+            system += f"\n\nPricing:\n{pricing_text}"
         if language:
             system += f"\nReply in language: {language}."
 
@@ -64,7 +67,13 @@ class AutoReplyAgent:
                 turns.append({"role": role, "content": message.content})
         return turns
 
-    def reply(self, history: list[Message], customer: Customer | None) -> str:
+    def reply(
+        self,
+        history: list[Message],
+        customer: Customer | None,
+        *,
+        pricing_text: str | None = None,
+    ) -> str:
         if not history:
             return self._fallback_reply
 
@@ -82,7 +91,7 @@ class AutoReplyAgent:
             if not knowledge:
                 return self._fallback_reply
 
-        context = self.build_context(history, customer, knowledge, language)
+        context = self.build_context(history, customer, knowledge, language, pricing_text)
         try:
             return self._llm.chat(context)
         except Exception:
