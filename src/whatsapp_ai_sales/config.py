@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     whatsapp_verify_token: str = "verify-me"
 
     rag_top_k: int = 5
+    rag_min_score: float = 0.0
     chunk_max_chars: int = 500
     chunk_overlap: int = 50
 

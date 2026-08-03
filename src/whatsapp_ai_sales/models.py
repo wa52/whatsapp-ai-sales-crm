@@ -6,6 +6,9 @@ from datetime import UTC, datetime
 
 from sqlmodel import Field, SQLModel
 
+ROLE_INBOUND = "inbound"
+ROLE_OUTBOUND = "outbound"
+
 
 def _now() -> datetime:
     return datetime.now(UTC)

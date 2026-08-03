@@ -105,6 +105,42 @@ def test_rag_reply_falls_back_without_knowledge() -> None:
     assert provider.sent[0].text == settings.fallback_reply
 
 
+def test_rag_reply_falls_back_when_query_is_unrelated() -> None:
+    client, llm, provider, settings = _app()
+    _add_product(client)
+
+    unrelated = {
+        **META,
+        "entry": [
+            {
+                **META["entry"][0],
+                "changes": [
+                    {
+                        **META["entry"][0]["changes"][0],
+                        "value": {
+                            **META["entry"][0]["changes"][0]["value"],
+                            "messages": [
+                                {
+                                    "from": "4912345678",
+                                    "id": "wamid.UNREL",
+                                    "timestamp": "1700000001",
+                                    "type": "text",
+                                    "text": {"body": "How is the weather today?"},
+                                }
+                            ],
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+
+    client.post("/webhooks/whatsapp", json=unrelated)
+
+    assert len(llm.calls) == 0
+    assert provider.sent[0].text == settings.fallback_reply
+
+
 def test_rag_reply_falls_back_after_product_deleted() -> None:
     client, llm, provider, settings = _app()
     product_id = _add_product(client)

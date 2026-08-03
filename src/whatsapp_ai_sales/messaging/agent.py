@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from ..llm.base import ChatMessage, LLMProvider
-from ..models import Customer, KnowledgeChunk, Message
+from ..models import ROLE_INBOUND, Customer, KnowledgeChunk, Message
 from ..rag.retriever import Retriever
 
-_ROLE_MAP = {"inbound": "user", "outbound": "assistant"}
+_ROLE_MAP = {ROLE_INBOUND: "user", "outbound": "assistant"}
 
 
 class AutoReplyAgent:
@@ -65,7 +65,7 @@ class AutoReplyAgent:
         knowledge: list[KnowledgeChunk] | None = None
         if self._retriever is not None:
             query = next(
-                (m.content for m in reversed(history) if m.role == "inbound"), None
+                (m.content for m in reversed(history) if m.role == ROLE_INBOUND), None
             )
             knowledge = self._retriever.retrieve(query) if query else []
             if not knowledge:
@@ -83,7 +83,7 @@ def _last_turns(history: list[Message], window: int) -> list[Message]:
     that followed it (the assistant reply belongs to the same turn)."""
     if window <= 0:
         return []
-    inbound_indexes = [i for i, m in enumerate(history) if m.role == "inbound"]
+    inbound_indexes = [i for i, m in enumerate(history) if m.role == ROLE_INBOUND]
     if len(inbound_indexes) <= window:
         return history
     start = inbound_indexes[len(inbound_indexes) - window]

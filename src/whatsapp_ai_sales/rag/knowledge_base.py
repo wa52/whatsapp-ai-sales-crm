@@ -47,7 +47,7 @@ class KnowledgeBase:
             self._session.add(product)
             self._session.flush()
         else:
-            product.sku = sku or product.sku
+            product.sku = sku
             self._drop_chunks(product.id)
 
         for section, text in (sections or {}).items():
@@ -76,12 +76,13 @@ class KnowledgeBase:
         for chunk in self._session.exec(select(KnowledgeChunk)).all():
             self._vector_store.add(chunk.id, self._embedder.embed(chunk.content))
 
-    def retriever(self, top_k: int = 5) -> Retriever:
+    def retriever(self, top_k: int = 5, min_score: float = 0.0) -> Retriever:
         return Retriever(
             embedder=self._embedder,
             vector_store=self._vector_store,
             resolver=self._chunk_resolver(),
             top_k=top_k,
+            min_score=min_score,
         )
 
     def _drop_chunks(self, product_id: int) -> None:

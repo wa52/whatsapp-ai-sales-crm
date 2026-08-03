@@ -38,38 +38,34 @@ def create_app(
     embedder = MockEmbedder()
     vector_store = MockVectorStore()
 
-    with Session(engine) as session:
-        KnowledgeBase(
+    def make_kb(session: Session) -> KnowledgeBase:
+        return KnowledgeBase(
             session,
             embedder=embedder,
             vector_store=vector_store,
             max_chars=settings.chunk_max_chars,
             overlap=settings.chunk_overlap,
-        ).reindex()
+        )
 
     def build_agent(session: Session) -> AutoReplyAgent:
-        kb = KnowledgeBase(
-            session,
-            embedder=embedder,
-            vector_store=vector_store,
-            max_chars=settings.chunk_max_chars,
-            overlap=settings.chunk_overlap,
+        retriever = make_kb(session).retriever(
+            top_k=settings.rag_top_k, min_score=settings.rag_min_score
         )
         return AutoReplyAgent(
             llm,
             system_prompt=settings.system_prompt,
             fallback_reply=settings.fallback_reply,
             window=settings.reply_window,
-            retriever=kb.retriever(top_k=settings.rag_top_k),
+            retriever=retriever,
         )
+
+    with Session(engine) as session:
+        make_kb(session).reindex()
 
     app = FastAPI(title="WhatsApp AI Sales")
     app.state.engine = engine
     app.state.provider = provider or MockWhatsAppProvider()
-    app.state.embedder = embedder
-    app.state.vector_store = vector_store
-    app.state.chunk_max_chars = settings.chunk_max_chars
-    app.state.chunk_overlap = settings.chunk_overlap
+    app.state.make_kb = make_kb
     app.state.build_agent = build_agent
     app.include_router(webhook.router)
     app.include_router(crm.router)
@@ -78,4 +74,3 @@ def create_app(
 
 
 app = create_app()
-

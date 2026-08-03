@@ -31,7 +31,14 @@ def test_retriever_returns_most_relevant_first() -> None:
 
     results = retriever.retrieve("What is the MOQ?")
 
-    assert [c.id for c in results] == [1, 2]
+    assert [c.id for c in results] == [1]
+
+
+def test_retriever_excludes_chunks_sharing_only_stopwords() -> None:
+    chunk = KnowledgeChunk(id=1, product_id=1, section="price", content="Sample price is 5 USD.")
+    retriever = _retriever([chunk])
+
+    assert retriever.retrieve("What is this thing?") == []
 
 
 def test_retriever_respects_top_k() -> None:

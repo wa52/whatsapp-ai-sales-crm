@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import phonenumbers
 from sqlmodel import Session, select
 
-from ..models import Conversation, Customer, Message
+from ..models import ROLE_INBOUND, ROLE_OUTBOUND, Conversation, Customer, Message
 from ..repos import get_conversation_messages
 from ..whatsapp.base import WhatsAppProvider
 from ..whatsapp.webhook import InboundMessage
@@ -63,7 +63,7 @@ class MessageIngestion:
         self.session.add(
             Message(
                 conversation_id=conversation.id,
-                role="inbound",
+                role=ROLE_INBOUND,
                 provider_message_id=inbound.message_id,
                 content=inbound.text,
             )
@@ -77,7 +77,7 @@ class MessageIngestion:
         self.session.add(
             Message(
                 conversation_id=conversation.id,
-                role="outbound",
+                role=ROLE_OUTBOUND,
                 provider_message_id=provider_message_id,
                 content=reply_text,
                 status="sent",
