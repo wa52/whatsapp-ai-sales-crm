@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     telegram_token: str | None = None
     telegram_poll_enabled: bool = True
     telegram_poll_interval: float = 1.0
+    http_proxy: str | None = None
 
     followup_no_reply_hours: int = 24
     followup_quote_hours: int = 48

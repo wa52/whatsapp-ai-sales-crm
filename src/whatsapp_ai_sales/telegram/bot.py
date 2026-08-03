@@ -11,9 +11,15 @@ API_BASE = "https://api.telegram.org/bot{token}"
 class TelegramBot:
     """Thin httpx client for the Telegram Bot API."""
 
-    def __init__(self, token: str, *, client: httpx.Client | None = None) -> None:
+    def __init__(
+        self,
+        token: str,
+        *,
+        client: httpx.Client | None = None,
+        proxy: str | None = None,
+    ) -> None:
         self._token = token
-        self._client = client or httpx.Client(timeout=30)
+        self._client = client or httpx.Client(proxy=proxy, timeout=30)
 
     def _url(self, method: str) -> str:
         return f"{API_BASE.format(token=self._token)}/{method}"

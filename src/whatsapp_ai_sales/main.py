@@ -49,7 +49,9 @@ def create_app(
     )
     if provider is None:
         provider = (
-            telegram_runtime.TelegramBot(settings.telegram_token)
+            telegram_runtime.TelegramBot(
+                settings.telegram_token, proxy=settings.http_proxy
+            )
             if settings.telegram_token
             else MockWhatsAppProvider()
         )
