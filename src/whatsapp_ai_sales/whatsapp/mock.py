@@ -20,10 +20,9 @@ class SentMessage:
 class MockWhatsAppProvider:
     """A no-op provider that records sent messages in memory."""
 
-    _ids = itertools.count(1)
-
     def __init__(self) -> None:
         self.sent: list[SentMessage] = []
+        self._ids = itertools.count(1)
 
     def send_message(self, to: str, text: str) -> str:
         message = SentMessage(message_id=f"mock.{next(self._ids)}", to=to, text=text)

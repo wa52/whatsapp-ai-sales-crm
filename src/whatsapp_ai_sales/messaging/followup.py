@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlmodel import Session, select
 
-from ..models import ROLE_OUTBOUND, Conversation, Customer, Message
+from ..models import ROLE_OUTBOUND, STATUS_ACTIVE, Conversation, Customer, Message
 from ..repos import send_outbound_message, touch
 from ..whatsapp.base import WhatsAppProvider
 from .handling import HANDLER_AI
@@ -95,7 +95,7 @@ class FollowUpRunner:
         now = now or datetime.now(UTC)
         sent = 0
         conversations = self._session.exec(
-            select(Conversation).where(Conversation.status == "active")
+            select(Conversation).where(Conversation.status == STATUS_ACTIVE)
         ).all()
         for conversation in conversations:
             last = self._session.exec(

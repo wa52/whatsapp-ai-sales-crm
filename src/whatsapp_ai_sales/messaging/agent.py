@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from ..llm.base import ChatMessage, LLMProvider
-from ..models import ROLE_INBOUND, Customer, KnowledgeChunk, Message
+from ..models import ROLE_INBOUND, ROLE_OUTBOUND, Customer, KnowledgeChunk, Message
 from ..rag.retriever import Retriever
 from .language import LanguageDetector
 
-_ROLE_MAP = {ROLE_INBOUND: "user", "outbound": "assistant"}
+_ROLE_MAP = {ROLE_INBOUND: "user", ROLE_OUTBOUND: "assistant"}
 
 
 class AutoReplyAgent:

@@ -6,8 +6,14 @@ from datetime import UTC, datetime
 
 from sqlmodel import Field, SQLModel
 
+from .messaging.handling import HANDLER_AI
+
 ROLE_INBOUND = "inbound"
 ROLE_OUTBOUND = "outbound"
+
+STATUS_RECEIVED = "received"
+STATUS_SENT = "sent"
+STATUS_ACTIVE = "active"
 
 
 def _now() -> datetime:
@@ -38,8 +44,8 @@ class Conversation(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     customer_id: int = Field(foreign_key="customer.id", index=True)
-    status: str = Field(default="active", index=True)
-    handler: str = Field(default="ai", index=True)
+    status: str = Field(default=STATUS_ACTIVE, index=True)
+    handler: str = Field(default=HANDLER_AI, index=True)
     dnd: bool = Field(default=False)
     followups_sent: int = Field(default=0)
     quote_sent: bool = Field(default=False)
@@ -53,10 +59,10 @@ class Message(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     conversation_id: int = Field(foreign_key="conversation.id", index=True)
-    role: str = Field(index=True)  # "inbound" | "outbound"
+    role: str = Field(index=True)  # ROLE_INBOUND | ROLE_OUTBOUND
     provider_message_id: str | None = Field(default=None, index=True)
     content: str
-    status: str = Field(default="received", index=True)
+    status: str = Field(default=STATUS_RECEIVED, index=True)
     created_at: datetime = Field(default_factory=_now)
 
 

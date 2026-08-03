@@ -7,7 +7,14 @@ from dataclasses import dataclass
 import phonenumbers
 from sqlmodel import Session, select
 
-from ..models import ROLE_INBOUND, Conversation, Customer, Message, Product
+from ..models import (
+    ROLE_INBOUND,
+    STATUS_ACTIVE,
+    Conversation,
+    Customer,
+    Message,
+    Product,
+)
 from ..pricing.service import ACTION_HUMAN, QuoteService, extract_offer
 from ..repos import get_conversation_messages, send_outbound_message, touch
 from ..whatsapp.base import WhatsAppProvider
@@ -74,9 +81,9 @@ class MessageIngestion:
         )
         conversation = self._get_or_create(
             Conversation,
-            [Conversation.customer_id == customer.id, Conversation.status == "active"],
+            [Conversation.customer_id == customer.id, Conversation.status == STATUS_ACTIVE],
             customer_id=customer.id,
-            status="active",
+            status=STATUS_ACTIVE,
             handler=HANDLER_AI,
         )
 

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
-from .models import ROLE_OUTBOUND, Conversation, Customer, Message
+from .models import ROLE_OUTBOUND, STATUS_SENT, Conversation, Customer, Message
 from .whatsapp.base import WhatsAppProvider
 
 
@@ -33,7 +33,7 @@ def send_outbound_message(
         role=ROLE_OUTBOUND,
         provider_message_id=provider_message_id,
         content=content,
-        status="sent",
+        status=STATUS_SENT,
     )
     session.add(message)
     return message
