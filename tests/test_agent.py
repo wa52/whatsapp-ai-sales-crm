@@ -1,21 +1,12 @@
 from datetime import UTC, datetime
 
-from whatsapp_ai_sales.llm.base import ChatMessage
-from whatsapp_ai_sales.messaging.agent import AutoReplyAgent
+from fakes import FakeLLM
+
+from whatsapp_ai_sales.messaging.agent import AutoReplyAgent, _last_turns
 from whatsapp_ai_sales.models import Customer, Message
 
-
-class FakeLLM:
-    def __init__(self, *, content: str = "ok", error: Exception | None = None) -> None:
-        self._content = content
-        self._error = error
-        self.calls: list[list[ChatMessage]] = []
-
-    def chat(self, messages: list[ChatMessage]) -> str:
-        self.calls.append(messages)
-        if self._error is not None:
-            raise self._error
-        return self._content
+SYSTEM_PROMPT = "You are a sales assistant."
+FALLBACK = "I will confirm with sales and reply shortly."
 
 
 def _message(role: str, content: str) -> Message:
@@ -25,10 +16,6 @@ def _message(role: str, content: str) -> Message:
         content=content,
         created_at=datetime.now(UTC),
     )
-
-
-SYSTEM_PROMPT = "You are a sales assistant."
-FALLBACK = "I will confirm with sales and reply shortly."
 
 
 def test_build_context_prepends_system_prompt_and_maps_roles() -> None:
@@ -51,19 +38,42 @@ def test_build_context_prepends_system_prompt_and_maps_roles() -> None:
     ]
 
 
-def test_build_context_keeps_only_last_window_turns() -> None:
-    llm = FakeLLM()
-    agent = AutoReplyAgent(llm, system_prompt=SYSTEM_PROMPT, fallback_reply=FALLBACK, window=2)
+def test_window_keeps_last_turns_including_assistant_replies() -> None:
     history = [
         _message("inbound", "m1"),
+        _message("outbound", "r1"),
         _message("inbound", "m2"),
+        _message("outbound", "r2"),
         _message("inbound", "m3"),
-        _message("inbound", "m4"),
+    ]
+
+    # window=2 keeps the last two customer turns: m2/r2 and m3
+    assert [m.content for m in _last_turns(history, 2)] == [
+        "m2",
+        "r2",
+        "m3",
+    ]
+
+    # window=1 keeps only the last turn (m3)
+    assert [m.content for m in _last_turns(history, 1)] == ["m3"]
+
+
+def test_build_context_uses_window_in_turns_not_messages() -> None:
+    llm = FakeLLM()
+    agent = AutoReplyAgent(llm, system_prompt=SYSTEM_PROMPT, fallback_reply=FALLBACK, window=1)
+    history = [
+        _message("inbound", "m1"),
+        _message("outbound", "r1"),
+        _message("inbound", "m2"),
+        _message("outbound", "r2"),
     ]
 
     context = agent.build_context(history, None)
 
-    assert [m["content"] for m in context[1:]] == ["m3", "m4"]
+    assert context[1:] == [
+        {"role": "user", "content": "m2"},
+        {"role": "assistant", "content": "r2"},
+    ]
 
 
 def test_build_context_includes_customer_summary() -> None:

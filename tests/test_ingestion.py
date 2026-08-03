@@ -1,25 +1,15 @@
+from fakes import FakeLLM
 from sqlmodel import Session, SQLModel, select
 
 from whatsapp_ai_sales.db import create_engine_for
 from whatsapp_ai_sales.messaging.agent import AutoReplyAgent
-from whatsapp_ai_sales.messaging.ingestion import MessageIngestion
+from whatsapp_ai_sales.messaging.ingestion import MessageIngestion, derive_country_code
 from whatsapp_ai_sales.models import Conversation, Customer, Message
 from whatsapp_ai_sales.whatsapp.mock import MockWhatsAppProvider
 from whatsapp_ai_sales.whatsapp.webhook import InboundMessage
 
 SYSTEM_PROMPT = "You are a sales assistant."
 FALLBACK = "I will confirm with sales and reply shortly."
-
-
-class FakeLLM:
-    def __init__(self, *, content: str = "ok", error: Exception | None = None) -> None:
-        self._content = content
-        self._error = error
-
-    def chat(self, messages: list[dict]) -> str:
-        if self._error is not None:
-            raise self._error
-        return self._content
 
 
 def _setup(llm: FakeLLM | None = None) -> tuple[MessageIngestion, MockWhatsAppProvider]:
@@ -47,9 +37,9 @@ def test_processes_first_message_end_to_end() -> None:
     assert result.handled is True
     assert result.reply_text == "The price is $8 each."
     assert len(provider.sent) == 1
-    _, to, text = provider.sent[0]
-    assert to == "4912345678"
-    assert text == "The price is $8 each."
+    sent = provider.sent[0]
+    assert sent.to == "4912345678"
+    assert sent.text == "The price is $8 each."
 
     customers = ingestion.session.exec(select(Customer)).all()
     conversations = ingestion.session.exec(select(Conversation)).all()
@@ -57,6 +47,18 @@ def test_processes_first_message_end_to_end() -> None:
     assert len(customers) == 1
     assert len(conversations) == 1
     assert {m.role for m in messages} == {"inbound", "outbound"}
+
+
+def test_customer_country_code_is_derived_from_phone() -> None:
+    ingestion, _ = _setup()
+
+    ingestion.handle_inbound(_inbound(wa_id="4912345678"))
+    ingestion.handle_inbound(_inbound(message_id="wamid.2", wa_id="5511999888777"))
+
+    customers = ingestion.session.exec(select(Customer)).all()
+    by_wa_id = {c.wa_id: c for c in customers}
+    assert by_wa_id["4912345678"].country_code == "DE"
+    assert by_wa_id["5511999888777"].country_code == "BR"
 
 
 def test_duplicate_message_id_is_skipped() -> None:
@@ -91,4 +93,9 @@ def test_llm_failure_still_persists_with_fallback_reply() -> None:
 
     assert result.handled is True
     assert result.reply_text == FALLBACK
-    assert provider.sent[-1][2] == FALLBACK
+    assert provider.sent[-1].text == FALLBACK
+
+
+def test_derive_country_code_handles_unparseable_numbers() -> None:
+    assert derive_country_code("not-a-number") is None
+    assert derive_country_code("4912345678") == "DE"

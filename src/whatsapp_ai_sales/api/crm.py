@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from ..deps import SessionDep
-from ..models import Conversation, Customer, Message
+from ..models import Conversation, Customer
+from ..repos import get_conversation_messages
 
 router = APIRouter(prefix="/api/crm", tags=["crm"])
 
@@ -36,7 +37,9 @@ class MessageOut(BaseModel):
 @router.get("/conversations", response_model=list[ConversationOut])
 def list_conversations(session: SessionDep) -> list[ConversationOut]:
     rows = session.exec(
-        select(Conversation, Customer).join(Customer).order_by(Conversation.updated_at.desc())
+        select(Conversation, Customer)
+        .join(Customer)
+        .order_by(Conversation.last_message_at.desc(), Conversation.id.desc())
     ).all()
     return [
         ConversationOut(
@@ -58,11 +61,7 @@ def list_messages(conversation_id: int, session: SessionDep) -> list[MessageOut]
     conversation = session.get(Conversation, conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    messages = session.exec(
-        select(Message)
-        .where(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at, Message.id)
-    ).all()
+    messages = get_conversation_messages(session, conversation_id)
     return [
         MessageOut(
             id=m.id, role=m.role, content=m.content, status=m.status, created_at=m.created_at

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Protocol
-
 from fastapi import FastAPI
 from sqlmodel import SQLModel
 
@@ -11,22 +9,17 @@ from .api import crm, webhook
 from .config import Settings
 from .config import settings as default_settings
 from .db import create_engine_for
-from .llm.base import ChatMessage
+from .llm.base import LLMProvider
 from .llm.litellm_provider import LiteLLMProvider
 from .messaging.agent import AutoReplyAgent
 from .whatsapp.base import WhatsAppProvider
 from .whatsapp.mock import MockWhatsAppProvider
 
 
-class ReplyLLM(Protocol):
-    def chat(self, messages: list[ChatMessage]) -> str:
-        ...
-
-
 def create_app(
     *,
     db_url: str | None = None,
-    llm: ReplyLLM | None = None,
+    llm: LLMProvider | None = None,
     provider: WhatsAppProvider | None = None,
     settings: Settings | None = None,
 ) -> FastAPI:

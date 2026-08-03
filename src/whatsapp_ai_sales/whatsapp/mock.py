@@ -7,6 +7,14 @@ touching the real WhatsApp API.
 from __future__ import annotations
 
 import itertools
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class SentMessage:
+    message_id: str
+    to: str
+    text: str
 
 
 class MockWhatsAppProvider:
@@ -15,9 +23,9 @@ class MockWhatsAppProvider:
     _ids = itertools.count(1)
 
     def __init__(self) -> None:
-        self.sent: list[tuple[str, str, str]] = []  # (message_id, to, text)
+        self.sent: list[SentMessage] = []
 
     def send_message(self, to: str, text: str) -> str:
-        message_id = f"mock.{next(self._ids)}"
-        self.sent.append((message_id, to, text))
-        return message_id
+        message = SentMessage(message_id=f"mock.{next(self._ids)}", to=to, text=text)
+        self.sent.append(message)
+        return message.message_id

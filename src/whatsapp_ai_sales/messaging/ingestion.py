@@ -5,9 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+import phonenumbers
 from sqlmodel import Session, select
 
 from ..models import Conversation, Customer, Message
+from ..repos import get_conversation_messages
 from ..whatsapp.base import WhatsAppProvider
 from ..whatsapp.webhook import InboundMessage
 from .agent import AutoReplyAgent
@@ -43,24 +45,32 @@ class MessageIngestion:
         if existing is not None:
             return HandlingResult(handled=False)
 
-        customer = self._get_or_create_customer(inbound)
-        conversation = self._get_or_create_conversation(customer)
-
-        inbound_msg = Message(
-            conversation_id=conversation.id,
-            role="inbound",
-            provider_message_id=inbound.message_id,
-            content=inbound.text,
+        customer = self._get_or_create(
+            Customer,
+            [Customer.wa_id == inbound.wa_id],
+            wa_id=inbound.wa_id,
+            name=inbound.profile_name,
+            country_code=derive_country_code(inbound.wa_id),
         )
-        self.session.add(inbound_msg)
+        conversation = self._get_or_create(
+            Conversation,
+            [Conversation.customer_id == customer.id, Conversation.status == "active"],
+            customer_id=customer.id,
+            status="active",
+            handler="ai",
+        )
+
+        self.session.add(
+            Message(
+                conversation_id=conversation.id,
+                role="inbound",
+                provider_message_id=inbound.message_id,
+                content=inbound.text,
+            )
+        )
         self.session.flush()
 
-        history = self.session.exec(
-            select(Message)
-            .where(Message.conversation_id == conversation.id)
-            .order_by(Message.created_at, Message.id)
-        ).all()
-
+        history = get_conversation_messages(self.session, conversation.id)
         reply_text = self._agent.reply(history, customer)
 
         provider_message_id = self._provider.send_message(customer.wa_id, reply_text)
@@ -73,31 +83,27 @@ class MessageIngestion:
                 status="sent",
             )
         )
-        conversation.last_message_at = datetime.now(UTC)
-        conversation.updated_at = datetime.now(UTC)
-        customer.updated_at = datetime.now(UTC)
+        now = datetime.now(UTC)
+        conversation.last_message_at = now
+        conversation.updated_at = now
+        customer.updated_at = now
         self.session.commit()
 
         return HandlingResult(handled=True, reply_text=reply_text)
 
-    def _get_or_create_customer(self, inbound: InboundMessage) -> Customer:
-        customer = self.session.exec(
-            select(Customer).where(Customer.wa_id == inbound.wa_id)
-        ).first()
-        if customer is None:
-            customer = Customer(wa_id=inbound.wa_id, name=inbound.profile_name)
-            self.session.add(customer)
+    def _get_or_create(self, model, conditions: list, **fields):
+        obj = self.session.exec(select(model).where(*conditions)).first()
+        if obj is None:
+            obj = model(**fields)
+            self.session.add(obj)
             self.session.flush()
-        return customer
+        return obj
 
-    def _get_or_create_conversation(self, customer: Customer) -> Conversation:
-        conversation = self.session.exec(
-            select(Conversation)
-            .where(Conversation.customer_id == customer.id)
-            .where(Conversation.status == "active")
-        ).first()
-        if conversation is None:
-            conversation = Conversation(customer_id=customer.id, status="active", handler="ai")
-            self.session.add(conversation)
-            self.session.flush()
-        return conversation
+
+def derive_country_code(wa_id: str) -> str | None:
+    """ISO country code for an E.164 WhatsApp id (no leading ``+``), if parseable."""
+    try:
+        parsed = phonenumbers.parse(f"+{wa_id}", None)
+    except phonenumbers.NumberParseException:
+        return None
+    return phonenumbers.region_code_for_number(parsed) or None

@@ -2,17 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Protocol
-
-from ..llm.base import ChatMessage
+from ..llm.base import ChatMessage, LLMProvider
 from ..models import Customer, Message
 
 _ROLE_MAP = {"inbound": "user", "outbound": "assistant"}
-
-
-class ReplyLLM(Protocol):
-    def chat(self, messages: list[ChatMessage]) -> str:
-        ...
 
 
 class AutoReplyAgent:
@@ -24,7 +17,7 @@ class AutoReplyAgent:
 
     def __init__(
         self,
-        llm_provider: ReplyLLM,
+        llm_provider: LLMProvider,
         *,
         system_prompt: str,
         fallback_reply: str,
@@ -50,7 +43,7 @@ class AutoReplyAgent:
         system = f"{self._system_prompt}{summary}"
 
         turns: list[ChatMessage] = [{"role": "system", "content": system}]
-        for message in history[-self._window :]:
+        for message in _last_turns(history, self._window):
             role = _ROLE_MAP.get(message.role)
             if role is not None:
                 turns.append({"role": role, "content": message.content})
@@ -64,3 +57,15 @@ class AutoReplyAgent:
             return self._llm.chat(context)
         except Exception:
             return self._fallback_reply
+
+
+def _last_turns(history: list[Message], window: int) -> list[Message]:
+    """Keep the last `window` customer turns: each inbound message plus everything
+    that followed it (the assistant reply belongs to the same turn)."""
+    if window <= 0:
+        return []
+    inbound_indexes = [i for i, m in enumerate(history) if m.role == "inbound"]
+    if len(inbound_indexes) <= window:
+        return history
+    start = inbound_indexes[len(inbound_indexes) - window]
+    return history[start:]
