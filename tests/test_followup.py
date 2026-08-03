@@ -3,7 +3,12 @@ from datetime import UTC, datetime, timedelta
 from sqlmodel import Session, SQLModel, select
 
 from whatsapp_ai_sales.db import create_engine_for
-from whatsapp_ai_sales.messaging.followup import FollowUpRunner, due_followup
+from whatsapp_ai_sales.messaging.followup import (
+    KIND_NO_REPLY,
+    KIND_QUOTE_FOLLOWUP,
+    FollowUpRunner,
+    due_followup,
+)
 from whatsapp_ai_sales.messaging.handling import HANDLER_AI, HANDLER_HUMAN
 from whatsapp_ai_sales.models import ROLE_OUTBOUND, Conversation, Customer, Message
 from whatsapp_ai_sales.whatsapp.mock import MockWhatsAppProvider
@@ -25,7 +30,7 @@ def _draft(handler: str = HANDLER_AI, **overrides):
         last_message_role=ROLE_OUTBOUND,
         last_message_at=_hours_ago(25),
         now=NOW,
-        quote_pending=False,
+        quote_sent=False,
         no_reply_hours=24,
         quote_followup_hours=48,
         max_followups=2,
@@ -34,8 +39,6 @@ def _draft(handler: str = HANDLER_AI, **overrides):
     )
     params.update(overrides)
     return due_followup(**params)
-
-
 class TestDueFollowup:
     def test_not_due_when_last_message_is_inbound(self) -> None:
         assert _draft(last_message_role="inbound") is None
@@ -46,13 +49,13 @@ class TestDueFollowup:
     def test_no_reply_due_after_threshold(self) -> None:
         draft = _draft()
         assert draft is not None
-        assert draft.kind == "no_reply"
+        assert draft.kind == KIND_NO_REPLY
         assert draft.message == NO_REPLY
 
     def test_quote_followup_preferred_when_pending(self) -> None:
-        draft = _draft(quote_pending=True, last_message_at=_hours_ago(50))
+        draft = _draft(quote_sent=True, last_message_at=_hours_ago(50))
         assert draft is not None
-        assert draft.kind == "quote_followup"
+        assert draft.kind == KIND_QUOTE_FOLLOWUP
         assert draft.message == QUOTE
 
     def test_skips_human_handler(self) -> None:

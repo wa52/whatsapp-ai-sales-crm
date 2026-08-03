@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from sqlmodel import Session, SQLModel
 
@@ -66,7 +68,18 @@ def create_app(
     with Session(engine) as session:
         make_kb(session).reindex()
 
-    app = FastAPI(title="WhatsApp AI Sales")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        if app.state.settings.followup_scheduler_enabled:
+            followup.start_followup_scheduler(app)
+        try:
+            yield
+        finally:
+            scheduler = getattr(app.state, "scheduler", None)
+            if scheduler is not None:
+                scheduler.shutdown(wait=False)
+
+    app = FastAPI(title="WhatsApp AI Sales", lifespan=lifespan)
     app.state.engine = engine
     app.state.settings = settings
     app.state.llm = llm

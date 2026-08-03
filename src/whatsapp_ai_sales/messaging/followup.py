@@ -30,7 +30,7 @@ def due_followup(
     last_message_role: str,
     last_message_at: datetime,
     now: datetime,
-    quote_pending: bool = False,
+    quote_sent: bool = False,
     no_reply_hours: int = 24,
     quote_followup_hours: int = 48,
     max_followups: int = 2,
@@ -50,7 +50,7 @@ def due_followup(
         return None
 
     elapsed = _aware(now) - _aware(last_message_at)
-    if quote_pending and elapsed >= timedelta(hours=quote_followup_hours):
+    if quote_sent and elapsed >= timedelta(hours=quote_followup_hours):
         return FollowUpDraft(kind=KIND_QUOTE_FOLLOWUP, message=quote_followup_message)
     if elapsed >= timedelta(hours=no_reply_hours):
         return FollowUpDraft(kind=KIND_NO_REPLY, message=no_reply_message)
@@ -87,26 +87,24 @@ class FollowUpRunner:
         self._quote_followup_message = quote_followup_message
 
     def run_due(self, now: datetime | None = None) -> int:
-        """Send every currently due follow-up; returns how many were sent."""
+        """Send every currently due follow-up; returns how many were sent.
+
+        Commits per conversation so a provider failure mid-scan never loses the
+        record of follow-ups already delivered (and thus never re-sends them).
+        """
         now = now or datetime.now(UTC)
         sent = 0
         conversations = self._session.exec(
             select(Conversation).where(Conversation.status == "active")
         ).all()
         for conversation in conversations:
-            if (
-                conversation.handler != HANDLER_AI
-                or conversation.dnd
-                or conversation.followups_sent >= self._max_followups
-            ):
-                continue
             last = self._session.exec(
                 select(Message)
                 .where(Message.conversation_id == conversation.id)
                 .order_by(Message.created_at.desc(), Message.id.desc())
                 .limit(1)
             ).first()
-            if last is None or last.role != ROLE_OUTBOUND:
+            if last is None:
                 continue
 
             draft = due_followup(
@@ -116,7 +114,7 @@ class FollowUpRunner:
                 last_message_role=last.role,
                 last_message_at=last.created_at,
                 now=now,
-                quote_pending=conversation.quote_sent,
+                quote_sent=conversation.quote_sent,
                 no_reply_hours=self._no_reply_hours,
                 quote_followup_hours=self._quote_hours,
                 max_followups=self._max_followups,
@@ -133,7 +131,7 @@ class FollowUpRunner:
             )
             conversation.followups_sent += 1
             touch(conversation)
+            self._session.commit()
             sent += 1
 
-        self._session.commit()
         return sent

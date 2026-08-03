@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     followup_quote_hours: int = 48
     followup_max: int = 2
     followup_interval_seconds: int = 3600
+    followup_scheduler_enabled: bool = True
     followup_no_reply_message: str = (
         "Hello! Just following up on your inquiry. Would you like more information or a quote?"
     )

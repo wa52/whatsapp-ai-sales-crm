@@ -102,7 +102,6 @@ def set_dnd(conversation_id: int, payload: DndIn, session: SessionDep) -> DndOut
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     conversation.dnd = payload.enabled
-    touch(conversation)
     session.commit()
     return DndOut(id=conversation.id, dnd=conversation.dnd)
 

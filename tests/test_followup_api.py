@@ -139,3 +139,13 @@ def test_scheduler_registers_followup_job() -> None:
         assert [job.id for job in jobs] == ["followup_job"]
     finally:
         app.state.scheduler.shutdown(wait=False)
+
+
+def test_lifespan_starts_scheduler() -> None:
+    llm = FakeLLM(content="ok")
+    provider = MockWhatsAppProvider()
+    app = create_app(db_url="sqlite://", llm=llm, provider=provider)
+
+    with TestClient(app):
+        assert app.state.scheduler is not None
+        assert [job.id for job in app.state.scheduler.get_jobs()] == ["followup_job"]
