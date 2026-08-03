@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from ..deps import SessionDep
+from ..deps import SessionDep, require_admin
 from ..models import PriceTier, PricingRule
 from ..pricing.service import QuoteService
 
-router = APIRouter(prefix="/api/pricing", tags=["pricing"])
+router = APIRouter(prefix="/api/pricing", tags=["pricing"], dependencies=[Depends(require_admin)])
 
 
 class TierIn(BaseModel):

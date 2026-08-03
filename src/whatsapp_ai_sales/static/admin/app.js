@@ -14,11 +14,17 @@ function showView(name) {
 }
 navButtons.forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
 
+let adminToken = localStorage.getItem("was-admin-token") || "";
+
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const headers = { "Content-Type": "application/json" };
+  if (adminToken) headers["X-Admin-Token"] = adminToken;
+  const response = await fetch(path, { ...options, headers });
+  if (response.status === 401 && !adminToken) {
+    adminToken = prompt("请输入管理 Token:") || "";
+    localStorage.setItem("was-admin-token", adminToken);
+    return api(path, options);
+  }
   if (!response.ok) throw new Error(`${path}: ${response.status}`);
   return response.json();
 }

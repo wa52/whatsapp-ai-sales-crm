@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from sqlmodel import Session
 
 from .messaging.ingestion import MessageIngestion
@@ -23,6 +23,16 @@ def get_session(request: Request) -> Iterator[Session]:
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
+def require_admin(
+    request: Request,
+    x_admin_token: Annotated[str | None, Header()] = None,
+) -> None:
+    """Guard admin APIs when an admin token is configured; webhooks stay public."""
+    expected = request.app.state.settings.admin_token
+    if expected is not None and x_admin_token != expected:
+        raise HTTPException(status_code=401, detail="Invalid admin token")
+
+
 def get_ingestion(request: Request, session: SessionDep) -> MessageIngestion:
     return build_ingestion(request.app, session)
 
@@ -36,6 +46,7 @@ def build_ingestion(app: FastAPI, session: Session) -> MessageIngestion:
         intent_extractor=_build_intent_extractor(app, session),
         quote_service=QuoteService(session),
         notifier=app.state.notifier,
+        audit=app.state.audit,
     )
 
 

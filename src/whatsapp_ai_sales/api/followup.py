@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request
 from sqlmodel import Session
 
 from ..config import Settings
-from ..deps import ProviderDep, SessionDep
+from ..deps import ProviderDep, SessionDep, require_admin
+from ..messaging.audit import AuditLogger
 from ..messaging.followup import FollowUpRunner
+from ..messaging.outbound import retry_failed_outbound
 from ..whatsapp.base import WhatsAppProvider
 
-router = APIRouter(prefix="/api/followups", tags=["followups"])
+router = APIRouter(
+    prefix="/api/followups",
+    tags=["followups"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 @router.post("/run")
@@ -21,11 +27,17 @@ def run_followups(
 ) -> dict[str, int]:
     """Manually trigger a follow-up scan (useful for demos and testing)."""
     settings: Settings = request.app.state.settings
-    runner = _runner(session, provider, settings)
-    return {"sent": runner.run_due()}
+    runner = _runner(session, provider, settings, request.app.state.audit)
+    retried = retry_failed_outbound(session, provider)
+    return {"sent": runner.run_due(), "retried": retried}
 
 
-def _runner(session: Session, provider: WhatsAppProvider, settings: Settings) -> FollowUpRunner:
+def _runner(
+    session: Session,
+    provider: WhatsAppProvider,
+    settings: Settings,
+    audit: AuditLogger | None,
+) -> FollowUpRunner:
     return FollowUpRunner(
         session,
         provider,
@@ -34,6 +46,7 @@ def _runner(session: Session, provider: WhatsAppProvider, settings: Settings) ->
         max_followups=settings.followup_max,
         no_reply_message=settings.followup_no_reply_message,
         quote_followup_message=settings.followup_quote_message,
+        audit=audit,
     )
 
 
@@ -45,7 +58,8 @@ def start_followup_scheduler(app: FastAPI) -> None:
 
     def job() -> None:
         with Session(app.state.engine) as session:
-            _runner(session, app.state.provider, settings).run_due()
+            retry_failed_outbound(session, app.state.provider)
+            _runner(session, app.state.provider, settings, app.state.audit).run_due()
 
     scheduler = BackgroundScheduler()
     scheduler.add_job(

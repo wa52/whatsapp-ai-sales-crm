@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from ..deps import kb_dep
+from ..deps import kb_dep, require_admin
 
-router = APIRouter(prefix="/api/kb", tags=["kb"])
+router = APIRouter(prefix="/api/kb", tags=["kb"], dependencies=[Depends(require_admin)])
 
 
 class ProductIn(BaseModel):

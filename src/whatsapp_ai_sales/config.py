@@ -24,6 +24,10 @@ class Settings(BaseSettings):
 
     intent_llm_extract: bool = False
 
+    admin_token: str | None = None
+    llm_fallback_models: list[str] = []
+    audit_log_path: str | None = None
+
     telegram_token: str | None = None
     telegram_poll_enabled: bool = True
     telegram_poll_interval: float = 1.0

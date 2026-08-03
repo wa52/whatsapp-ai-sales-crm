@@ -9,21 +9,27 @@ from sqlmodel import Session, select
 
 from ..models import (
     ROLE_INBOUND,
+    ROLE_OUTBOUND,
     STATUS_ACTIVE,
+    STATUS_FAILED,
     Conversation,
     Customer,
     Message,
     Product,
 )
 from ..pricing.service import ACTION_HUMAN, QuoteService, extract_offer
-from ..repos import get_conversation_messages, send_outbound_message, touch
+from ..repos import get_conversation_messages, touch
 from ..whatsapp.base import WhatsAppProvider
 from ..whatsapp.webhook import InboundMessage
 from .agent import AutoReplyAgent
+from .audit import AuditLogger
 from .handling import HANDLER_AI, HANDLER_HUMAN, HandoffSignals, should_handoff
 from .intent import CustomerIntent, IntentExtractor, merge_intents
 from .notification import KIND_HANDOFF, KIND_LEAD_HIGH, NotificationEvent, Notifier
+from .outbound import send_with_retry
 from .scoring import score_lead
+
+SEND_MAX_ATTEMPTS = 3
 
 
 @dataclass(frozen=True)
@@ -57,6 +63,7 @@ class MessageIngestion:
         intent_extractor: IntentExtractor | None = None,
         quote_service: QuoteService | None = None,
         notifier: Notifier | None = None,
+        audit: AuditLogger | None = None,
     ) -> None:
         self.session = session
         self._agent = agent
@@ -64,6 +71,7 @@ class MessageIngestion:
         self._intent_extractor = intent_extractor
         self._quote_service = quote_service
         self._notifier = notifier
+        self._audit = audit
 
     def handle_inbound(self, inbound: InboundMessage) -> HandlingResult:
         existing = self.session.exec(
@@ -125,7 +133,27 @@ class MessageIngestion:
         )
         handoff = should_handoff(signals)
 
-        send_outbound_message(self.session, self._provider, conversation, customer, reply_text)
+        try:
+            send_with_retry(
+                self.session,
+                self._provider,
+                conversation,
+                customer,
+                reply_text,
+                max_attempts=SEND_MAX_ATTEMPTS,
+            )
+        except Exception:
+            self.session.add(
+                Message(
+                    conversation_id=conversation.id,
+                    role=ROLE_OUTBOUND,
+                    content=reply_text,
+                    status=STATUS_FAILED,
+                    attempts=SEND_MAX_ATTEMPTS,
+                )
+            )
+            if self._audit is not None:
+                self._audit.log("outbound_failed", wa_id=customer.wa_id, content=reply_text)
         if merged is not None:
             inbound_count = sum(1 for m in history if m.role == ROLE_INBOUND)
             self._apply_profile(customer, merged, inbound_count)
@@ -134,15 +162,13 @@ class MessageIngestion:
 
         if handoff:
             conversation.handler = HANDLER_HUMAN
-            if self._notifier is not None:
-                self._notifier.notify(
-                    NotificationEvent(
-                        kind=KIND_HANDOFF,
-                        wa_id=customer.wa_id,
-                        details=f"reason=fell_back:{signals.fell_back},"
-                        f"need_human:{signals.need_human},verdict_human:{signals.verdict_human}",
-                    )
-                )
+            self._emit(
+                kind="handoff",
+                event_kind=KIND_HANDOFF,
+                wa_id=customer.wa_id,
+                details=f"reason=fell_back:{signals.fell_back},"
+                f"need_human:{signals.need_human},verdict_human:{signals.verdict_human}",
+            )
 
         touch(conversation, customer)
         self.session.commit()
@@ -150,13 +176,21 @@ class MessageIngestion:
         return HandlingResult(handled=True, reply_text=reply_text)
 
     def _notify_lead_high(self, customer: Customer) -> None:
-        self._notifier.notify(
-            NotificationEvent(
-                kind=KIND_LEAD_HIGH,
-                wa_id=customer.wa_id,
-                details=f"lead_score={customer.lead_score}",
-            )
+        self._emit(
+            kind="lead_high",
+            event_kind=KIND_LEAD_HIGH,
+            wa_id=customer.wa_id,
+            details=f"lead_score={customer.lead_score}",
         )
+
+    def _emit(self, kind: str, event_kind: str, wa_id: str, details: str) -> None:
+        """Fan out an event to both the notifier (sales alert) and the audit log."""
+        if self._notifier is not None:
+            self._notifier.notify(
+                NotificationEvent(kind=event_kind, wa_id=wa_id, details=details)
+            )
+        if self._audit is not None:
+            self._audit.log(kind, wa_id=wa_id, details=details)
 
     def _apply_profile_if_needed(
         self, customer: Customer, merged: CustomerIntent | None, history: list[Message]

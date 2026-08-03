@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from ..config import Settings
-from ..deps import SessionDep
+from ..deps import SessionDep, require_admin
 from ..reporting import ReportService
 
-router = APIRouter(prefix="/api/reports", tags=["reports"])
+router = APIRouter(prefix="/api/reports", tags=["reports"], dependencies=[Depends(require_admin)])
 
 
 class ReportOut(BaseModel):

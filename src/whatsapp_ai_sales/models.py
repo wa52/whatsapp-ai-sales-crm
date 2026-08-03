@@ -13,6 +13,7 @@ ROLE_OUTBOUND = "outbound"
 
 STATUS_RECEIVED = "received"
 STATUS_SENT = "sent"
+STATUS_FAILED = "failed"
 STATUS_ACTIVE = "active"
 
 
@@ -63,6 +64,7 @@ class Message(SQLModel, table=True):
     provider_message_id: str | None = Field(default=None, index=True)
     content: str
     status: str = Field(default=STATUS_RECEIVED, index=True)
+    attempts: int = Field(default=0)
     created_at: datetime = Field(default_factory=_now)
 
 

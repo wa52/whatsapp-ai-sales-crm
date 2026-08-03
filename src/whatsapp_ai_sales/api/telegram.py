@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
+from ..deps import require_admin
 from ..telegram import runtime as telegram_runtime
 
-router = APIRouter(prefix="/api/telegram", tags=["telegram"])
+router = APIRouter(prefix="/api/telegram", tags=["telegram"], dependencies=[Depends(require_admin)])
 
 
 @router.post("/poll")

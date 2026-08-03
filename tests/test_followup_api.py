@@ -85,7 +85,7 @@ def test_run_endpoint_sends_due_followup() -> None:
 
     response = client.post("/api/followups/run")
 
-    assert response.json() == {"sent": 1}
+    assert response.json()["sent"] == 1
     assert provider.sent[-1].text == (
         "Hello! Just following up on your inquiry. Would you like more information or a quote?"
     )
@@ -99,7 +99,7 @@ def test_run_skips_dnd_conversation() -> None:
     _backdate_messages(app)
     sent_before = len(provider.sent)
 
-    assert client.post("/api/followups/run").json() == {"sent": 0}
+    assert client.post("/api/followups/run").json()["sent"] == 0
     assert len(provider.sent) == sent_before
 
 

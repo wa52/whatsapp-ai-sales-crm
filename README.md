@@ -22,11 +22,21 @@ uv run fastapi dev
 WAS_DATABASE_URL=sqlite:///./was.db
 WAS_LLM_MODEL=deepseek/deepseek-chat
 WAS_LLM_API_KEY=sk-xxx
+WAS_LLM_FALLBACK_MODELS=["openai/gpt-4o-mini"]   # 主模型失败自动降级
+WAS_ADMIN_TOKEN=secret                            # 设置后管理 API 需 X-Admin-Token 头
+WAS_AUDIT_LOG=./audit.jsonl                       # 关键事件/LLM 成本 JSON 行日志
 WAS_WHATSAPP_VERIFY_TOKEN=verify-me
 WAS_TELEGRAM_TOKEN=123456:ABC...   # 设置后默认出站渠道切到 Telegram 机器人
 ```
 
-未配置 `WAS_LLM_API_KEY` 时用 `MockWhatsAppProvider` 捕获外发消息，可本地联调。启动后访问 `http://localhost:8000/admin` 打开管理后台（客户列表、聊天工作台、报表、知识库、定价录入）。
+未配置 `WAS_LLM_API_KEY` 时用 `MockWhatsAppProvider` 捕获外发消息，可本地联调。启动后访问 `http://localhost:8000/admin` 打开管理后台（客户列表、聊天工作台、报表、知识库、定价录入）。设置 `WAS_ADMIN_TOKEN` 后，管理 API 需要 `X-Admin-Token` 请求头（前端会提示输入并记住）。
+
+## 生产加固（v5）
+
+- **鉴权**：`WAS_ADMIN_TOKEN` 保护全部管理 API（/api/crm、/api/kb、/api/pricing、/api/reports、/api/followups、/api/telegram）；webhook 保持公开。
+- **出站失败韧性**：provider 短暂故障自动重试 3 次；仍失败时入站消息照常落库、外发标记 `failed`，由调度任务 `retry_failed_outbound` 重发（`attempts` 超限则放弃）。
+- **模型降级**：`WAS_LLM_FALLBACK_MODELS` 交给 litellm，主模型失败自动切换。
+- **审计与成本**：`WAS_AUDIT_LOG` 以 JSON 行记录 handoff / 高意向 / 接管 / 跟进 / 出站失败，以及每次 LLM 调用的 token 与费用。
 
 ## Telegram 机器人
 

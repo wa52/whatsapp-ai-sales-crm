@@ -4,16 +4,20 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlmodel import select
 
-from ..deps import ProviderDep, SessionDep
+from ..deps import ProviderDep, SessionDep, require_admin
 from ..messaging.handling import HANDLER_AI, HANDLER_HUMAN
 from ..models import Conversation, Customer
 from ..repos import get_conversation_messages, send_outbound_message, touch
 
-router = APIRouter(prefix="/api/crm", tags=["crm"])
+router = APIRouter(
+    prefix="/api/crm",
+    tags=["crm"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 class ConversationOut(BaseModel):
@@ -107,25 +111,27 @@ def set_dnd(conversation_id: int, payload: DndIn, session: SessionDep) -> DndOut
 
 
 @router.post("/conversations/{conversation_id}/takeover", response_model=ConversationStateOut)
-def takeover(conversation_id: int, session: SessionDep) -> ConversationStateOut:
+def takeover(conversation_id: int, session: SessionDep, request: Request) -> ConversationStateOut:
     """A human takes over the conversation; the AI stops auto-replying."""
     conversation = session.get(Conversation, conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     conversation.handler = HANDLER_HUMAN
     touch(conversation)
+    request.app.state.audit.log("takeover", conversation_id=conversation_id)
     session.commit()
     return ConversationStateOut(id=conversation.id, handler=conversation.handler)
 
 
 @router.post("/conversations/{conversation_id}/release", response_model=ConversationStateOut)
-def release(conversation_id: int, session: SessionDep) -> ConversationStateOut:
+def release(conversation_id: int, session: SessionDep, request: Request) -> ConversationStateOut:
     """Return the conversation to the AI."""
     conversation = session.get(Conversation, conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     conversation.handler = HANDLER_AI
     touch(conversation)
+    request.app.state.audit.log("release", conversation_id=conversation_id)
     session.commit()
     return ConversationStateOut(id=conversation.id, handler=conversation.handler)
 
@@ -140,6 +146,7 @@ def send_manual_message(
     payload: ManualMessageIn,
     session: SessionDep,
     provider: ProviderDep,
+    request: Request,
 ) -> MessageOut:
     """A human sends a message to the customer on behalf of the business."""
     conversation = session.get(Conversation, conversation_id)
@@ -151,6 +158,7 @@ def send_manual_message(
 
     message = send_outbound_message(session, provider, conversation, customer, payload.content)
     touch(conversation)
+    request.app.state.audit.log("manual_message", conversation_id=conversation_id)
     session.commit()
     return MessageOut(
         id=message.id,

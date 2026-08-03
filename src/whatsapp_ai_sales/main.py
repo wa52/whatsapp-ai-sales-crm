@@ -16,6 +16,7 @@ from .db import create_engine_for
 from .llm.base import LLMProvider
 from .llm.litellm_provider import LiteLLMProvider
 from .messaging.agent import AutoReplyAgent
+from .messaging.audit import AuditLogger
 from .messaging.language import KeywordLanguageDetector
 from .messaging.notification import LogNotifier, Notifier
 from .rag.embeddings import MockEmbedder
@@ -38,10 +39,13 @@ def create_app(
     engine = create_engine_for(db_url or settings.database_url)
     SQLModel.metadata.create_all(engine)
 
+    audit = AuditLogger(settings.audit_log_path)
     llm = llm or LiteLLMProvider(
         model=settings.llm_model,
         api_key=settings.llm_api_key,
         base_url=settings.llm_base_url,
+        fallbacks=settings.llm_fallback_models,
+        on_usage=lambda usage: audit.log("llm_cost", **usage),
     )
     if provider is None:
         provider = (
@@ -97,6 +101,7 @@ def create_app(
     app.state.intent_llm_extract = settings.intent_llm_extract
     app.state.provider = provider or MockWhatsAppProvider()
     app.state.notifier = notifier or LogNotifier()
+    app.state.audit = audit
     app.state.make_kb = make_kb
     app.state.build_agent = build_agent
     app.include_router(webhook.router)

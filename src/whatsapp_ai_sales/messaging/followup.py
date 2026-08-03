@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 from ..models import ROLE_OUTBOUND, STATUS_ACTIVE, Conversation, Customer, Message
 from ..repos import send_outbound_message, touch
 from ..whatsapp.base import WhatsAppProvider
+from .audit import AuditLogger
 from .handling import HANDLER_AI
 
 KIND_NO_REPLY = "no_reply"
@@ -77,6 +78,7 @@ class FollowUpRunner:
         max_followups: int,
         no_reply_message: str,
         quote_followup_message: str,
+        audit: AuditLogger | None = None,
     ) -> None:
         self._session = session
         self._provider = provider
@@ -85,6 +87,7 @@ class FollowUpRunner:
         self._max_followups = max_followups
         self._no_reply_message = no_reply_message
         self._quote_followup_message = quote_followup_message
+        self._audit = audit
 
     def run_due(self, now: datetime | None = None) -> int:
         """Send every currently due follow-up; returns how many were sent.
@@ -131,6 +134,10 @@ class FollowUpRunner:
             )
             conversation.followups_sent += 1
             touch(conversation)
+            if self._audit is not None:
+                self._audit.log(
+                    "followup_sent", followup_kind=draft.kind, wa_id=customer.wa_id
+                )
             self._session.commit()
             sent += 1
 
