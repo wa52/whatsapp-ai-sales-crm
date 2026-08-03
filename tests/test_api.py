@@ -42,7 +42,12 @@ def _app() -> tuple[TestClient, MockWhatsAppProvider]:
         llm=FakeLLM(content="The price is $8 each."),
         provider=provider,
     )
-    return TestClient(app), provider
+    client = TestClient(app)
+    client.post(
+        "/api/kb/products",
+        json={"name": "Widget", "sections": {"price": "The price is $8 each."}},
+    )
+    return client, provider
 
 
 def test_webhook_processes_message_and_sends_reply() -> None:

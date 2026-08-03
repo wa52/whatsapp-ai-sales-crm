@@ -16,6 +16,11 @@ class Settings(BaseSettings):
 
     reply_window: int = 10
     whatsapp_verify_token: str = "verify-me"
+
+    rag_top_k: int = 5
+    chunk_max_chars: int = 500
+    chunk_overlap: int = 50
+
     fallback_reply: str = (
         "Thank you for your message. I need to confirm this with our sales team "
         "and will get back to you shortly."

@@ -12,3 +12,13 @@ class FakeLLM:
         if self._error is not None:
             raise self._error
         return self._content
+
+
+class FakeRetriever:
+    def __init__(self, chunks: list) -> None:
+        self.chunks = list(chunks)
+        self.queries: list[str] = []
+
+    def retrieve(self, query: str) -> list:
+        self.queries.append(query)
+        return list(self.chunks)

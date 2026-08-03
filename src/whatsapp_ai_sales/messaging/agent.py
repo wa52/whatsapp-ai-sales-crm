@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from ..llm.base import ChatMessage, LLMProvider
-from ..models import Customer, Message
+from ..models import Customer, KnowledgeChunk, Message
+from ..rag.retriever import Retriever
 
 _ROLE_MAP = {"inbound": "user", "outbound": "assistant"}
 
@@ -11,8 +12,9 @@ _ROLE_MAP = {"inbound": "user", "outbound": "assistant"}
 class AutoReplyAgent:
     """Builds a bounded prompt from recent history + customer summary and replies.
 
-    The LLM only formats the reply; anything the agent cannot answer falls back
-    to a fixed safe message instead of letting the model guess.
+    When a retriever is configured, the latest customer question is grounded in
+    retrieved product knowledge. If nothing relevant is found the agent returns
+    a fixed safe message instead of letting the model guess.
     """
 
     def __init__(
@@ -22,16 +24,21 @@ class AutoReplyAgent:
         system_prompt: str,
         fallback_reply: str,
         window: int = 10,
+        retriever: Retriever | None = None,
     ) -> None:
         self._llm = llm_provider
         self._system_prompt = system_prompt
         self._fallback_reply = fallback_reply
         self._window = window
+        self._retriever = retriever
 
     def build_context(
-        self, history: list[Message], customer: Customer | None
+        self,
+        history: list[Message],
+        customer: Customer | None,
+        knowledge: list[KnowledgeChunk] | None = None,
     ) -> list[ChatMessage]:
-        summary = ""
+        system = self._system_prompt
         if customer is not None:
             bits = []
             if customer.name:
@@ -39,8 +46,10 @@ class AutoReplyAgent:
             if customer.country_code:
                 bits.append(f"country: {customer.country_code}")
             if bits:
-                summary = f"\nCustomer: {', '.join(bits)}."
-        system = f"{self._system_prompt}{summary}"
+                system += f"\nCustomer: {', '.join(bits)}."
+        if knowledge:
+            lines = "\n".join(f"- [{c.section}] {c.content}" for c in knowledge)
+            system += f"\n\nProduct knowledge:\n{lines}"
 
         turns: list[ChatMessage] = [{"role": "system", "content": system}]
         for message in _last_turns(history, self._window):
@@ -52,7 +61,17 @@ class AutoReplyAgent:
     def reply(self, history: list[Message], customer: Customer | None) -> str:
         if not history:
             return self._fallback_reply
-        context = self.build_context(history, customer)
+
+        knowledge: list[KnowledgeChunk] | None = None
+        if self._retriever is not None:
+            query = next(
+                (m.content for m in reversed(history) if m.role == "inbound"), None
+            )
+            knowledge = self._retriever.retrieve(query) if query else []
+            if not knowledge:
+                return self._fallback_reply
+
+        context = self.build_context(history, customer, knowledge)
         try:
             return self._llm.chat(context)
         except Exception:

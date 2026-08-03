@@ -45,3 +45,22 @@ class Message(SQLModel, table=True):
     content: str
     status: str = Field(default="received", index=True)
     created_at: datetime = Field(default_factory=_now)
+
+
+class Product(SQLModel, table=True):
+    """A product whose knowledge is searchable by the RAG pipeline."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    sku: str | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=_now)
+
+
+class KnowledgeChunk(SQLModel, table=True):
+    """A labeled slice of product knowledge, the unit RAG retrieves."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    product_id: int = Field(foreign_key="product.id", index=True)
+    section: str = Field(index=True)
+    content: str
+    created_at: datetime = Field(default_factory=_now)
