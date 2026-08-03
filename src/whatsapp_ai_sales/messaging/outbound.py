@@ -26,7 +26,6 @@ def send_with_retry(
         except Exception:
             if attempt >= max_attempts:
                 raise
-    raise RuntimeError("unreachable")
 
 
 def retry_failed_outbound(

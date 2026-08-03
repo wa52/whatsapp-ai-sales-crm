@@ -16,14 +16,14 @@ navButtons.forEach((b) => b.addEventListener("click", () => showView(b.dataset.v
 
 let adminToken = localStorage.getItem("was-admin-token") || "";
 
-async function api(path, options = {}) {
+async function api(path, options = {}, prompted = false) {
   const headers = { "Content-Type": "application/json" };
   if (adminToken) headers["X-Admin-Token"] = adminToken;
   const response = await fetch(path, { ...options, headers });
-  if (response.status === 401 && !adminToken) {
+  if (response.status === 401 && !prompted) {
     adminToken = prompt("请输入管理 Token:") || "";
     localStorage.setItem("was-admin-token", adminToken);
-    return api(path, options);
+    return api(path, options, true);
   }
   if (!response.ok) throw new Error(`${path}: ${response.status}`);
   return response.json();

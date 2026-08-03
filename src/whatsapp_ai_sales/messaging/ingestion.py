@@ -22,7 +22,7 @@ from ..repos import get_conversation_messages, touch
 from ..whatsapp.base import WhatsAppProvider
 from ..whatsapp.webhook import InboundMessage
 from .agent import AutoReplyAgent
-from .audit import AuditLogger
+from .audit import AUDIT_HANDOFF, AUDIT_LEAD_HIGH, AUDIT_OUTBOUND_FAILED, AuditLogger
 from .handling import HANDLER_AI, HANDLER_HUMAN, HandoffSignals, should_handoff
 from .intent import CustomerIntent, IntentExtractor, merge_intents
 from .notification import KIND_HANDOFF, KIND_LEAD_HIGH, NotificationEvent, Notifier
@@ -149,11 +149,10 @@ class MessageIngestion:
                     role=ROLE_OUTBOUND,
                     content=reply_text,
                     status=STATUS_FAILED,
-                    attempts=SEND_MAX_ATTEMPTS,
                 )
             )
             if self._audit is not None:
-                self._audit.log("outbound_failed", wa_id=customer.wa_id, content=reply_text)
+                self._audit.log(AUDIT_OUTBOUND_FAILED, wa_id=customer.wa_id, content=reply_text)
         if merged is not None:
             inbound_count = sum(1 for m in history if m.role == ROLE_INBOUND)
             self._apply_profile(customer, merged, inbound_count)
@@ -163,7 +162,7 @@ class MessageIngestion:
         if handoff:
             conversation.handler = HANDLER_HUMAN
             self._emit(
-                kind="handoff",
+                kind=AUDIT_HANDOFF,
                 event_kind=KIND_HANDOFF,
                 wa_id=customer.wa_id,
                 details=f"reason=fell_back:{signals.fell_back},"
@@ -177,7 +176,7 @@ class MessageIngestion:
 
     def _notify_lead_high(self, customer: Customer) -> None:
         self._emit(
-            kind="lead_high",
+            kind=AUDIT_LEAD_HIGH,
             event_kind=KIND_LEAD_HIGH,
             wa_id=customer.wa_id,
             details=f"lead_score={customer.lead_score}",

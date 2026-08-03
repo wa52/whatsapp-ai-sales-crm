@@ -8,6 +8,15 @@ from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
+AUDIT_HANDOFF = "handoff"
+AUDIT_LEAD_HIGH = "lead_high"
+AUDIT_TAKEOVER = "takeover"
+AUDIT_RELEASE = "release"
+AUDIT_MANUAL_MESSAGE = "manual_message"
+AUDIT_FOLLOWUP_SENT = "followup_sent"
+AUDIT_OUTBOUND_FAILED = "outbound_failed"
+AUDIT_LLM_COST = "llm_cost"
+
 
 class AuditLogger:
     """Writes one JSON line per event to a log file (or the app log if unset)."""

@@ -10,7 +10,7 @@ from sqlmodel import Session, select
 from ..models import ROLE_OUTBOUND, STATUS_ACTIVE, Conversation, Customer, Message
 from ..repos import send_outbound_message, touch
 from ..whatsapp.base import WhatsAppProvider
-from .audit import AuditLogger
+from .audit import AUDIT_FOLLOWUP_SENT, AuditLogger
 from .handling import HANDLER_AI
 
 KIND_NO_REPLY = "no_reply"
@@ -136,7 +136,7 @@ class FollowUpRunner:
             touch(conversation)
             if self._audit is not None:
                 self._audit.log(
-                    "followup_sent", followup_kind=draft.kind, wa_id=customer.wa_id
+                    AUDIT_FOLLOWUP_SENT, followup_kind=draft.kind, wa_id=customer.wa_id
                 )
             self._session.commit()
             sent += 1

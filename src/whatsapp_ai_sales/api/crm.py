@@ -9,6 +9,11 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from ..deps import ProviderDep, SessionDep, require_admin
+from ..messaging.audit import (
+    AUDIT_MANUAL_MESSAGE,
+    AUDIT_RELEASE,
+    AUDIT_TAKEOVER,
+)
 from ..messaging.handling import HANDLER_AI, HANDLER_HUMAN
 from ..models import Conversation, Customer
 from ..repos import get_conversation_messages, send_outbound_message, touch
@@ -118,7 +123,7 @@ def takeover(conversation_id: int, session: SessionDep, request: Request) -> Con
         raise HTTPException(status_code=404, detail="Conversation not found")
     conversation.handler = HANDLER_HUMAN
     touch(conversation)
-    request.app.state.audit.log("takeover", conversation_id=conversation_id)
+    request.app.state.audit.log(AUDIT_TAKEOVER, conversation_id=conversation_id)
     session.commit()
     return ConversationStateOut(id=conversation.id, handler=conversation.handler)
 
@@ -131,7 +136,7 @@ def release(conversation_id: int, session: SessionDep, request: Request) -> Conv
         raise HTTPException(status_code=404, detail="Conversation not found")
     conversation.handler = HANDLER_AI
     touch(conversation)
-    request.app.state.audit.log("release", conversation_id=conversation_id)
+    request.app.state.audit.log(AUDIT_RELEASE, conversation_id=conversation_id)
     session.commit()
     return ConversationStateOut(id=conversation.id, handler=conversation.handler)
 
@@ -158,7 +163,7 @@ def send_manual_message(
 
     message = send_outbound_message(session, provider, conversation, customer, payload.content)
     touch(conversation)
-    request.app.state.audit.log("manual_message", conversation_id=conversation_id)
+    request.app.state.audit.log(AUDIT_MANUAL_MESSAGE, conversation_id=conversation_id)
     session.commit()
     return MessageOut(
         id=message.id,

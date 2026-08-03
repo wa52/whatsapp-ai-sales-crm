@@ -16,7 +16,7 @@ from .db import create_engine_for
 from .llm.base import LLMProvider
 from .llm.litellm_provider import LiteLLMProvider
 from .messaging.agent import AutoReplyAgent
-from .messaging.audit import AuditLogger
+from .messaging.audit import AUDIT_LLM_COST, AuditLogger
 from .messaging.language import KeywordLanguageDetector
 from .messaging.notification import LogNotifier, Notifier
 from .rag.embeddings import MockEmbedder
@@ -45,7 +45,7 @@ def create_app(
         api_key=settings.llm_api_key,
         base_url=settings.llm_base_url,
         fallbacks=settings.llm_fallback_models,
-        on_usage=lambda usage: audit.log("llm_cost", **usage),
+        on_usage=lambda usage: audit.log(AUDIT_LLM_COST, **usage),
     )
     if provider is None:
         provider = (

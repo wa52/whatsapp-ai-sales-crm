@@ -154,3 +154,59 @@ def test_retry_stops_at_max_attempts() -> None:
     count = retry_failed_outbound(session, MockWhatsAppProvider(), max_attempts=2)
 
     assert count == 0
+
+
+def test_ingestion_failure_is_retriable_by_sweep() -> None:
+    """A message that failed during ingestion (attempts=0) can be resent later."""
+    app = create_app(
+        db_url="sqlite://",
+        llm=FakeLLM(content="ok"),
+        provider=AlwaysFailing(),
+        settings=Settings(fallback_reply="FALLBACK"),
+    )
+    client = TestClient(app)
+    client.post(
+        "/webhooks/whatsapp",
+        json={
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "id": "WABA_ID",
+                    "changes": [
+                        {
+                            "value": {
+                                "messaging_product": "whatsapp",
+                                "metadata": {
+                                    "display_phone_number": "15551234567",
+                                    "phone_number_id": "PHONE_NUMBER_ID",
+                                },
+                                "contacts": [{"profile": {"name": "John"}, "wa_id": "4912345678"}],
+                                "messages": [
+                                    {
+                                        "from": "4912345678",
+                                        "id": "wamid.v5b",
+                                        "timestamp": "1700000000",
+                                        "type": "text",
+                                        "text": {"body": "hello"},
+                                    }
+                                ],
+                            }
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    with Session(app.state.engine) as session:
+        failed = session.exec(
+            select(Message).where(Message.status == STATUS_FAILED)
+        ).first()
+        assert failed is not None
+        assert failed.attempts == 0  # fresh failure, full retry budget
+
+        working = MockWhatsAppProvider()
+        count = retry_failed_outbound(session, working, max_attempts=2)
+
+        assert count == 1
+        assert working.sent[-1].text == "FALLBACK"
