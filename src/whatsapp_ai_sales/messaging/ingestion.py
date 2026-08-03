@@ -9,7 +9,7 @@ import phonenumbers
 from sqlmodel import Session, select
 
 from ..models import ROLE_INBOUND, ROLE_OUTBOUND, Conversation, Customer, Message, Product
-from ..pricing.service import QuoteService
+from ..pricing.service import QuoteService, extract_offer
 from ..repos import get_conversation_messages
 from ..whatsapp.base import WhatsAppProvider
 from ..whatsapp.webhook import InboundMessage
@@ -123,23 +123,33 @@ class MessageIngestion:
         if rule is None:
             return None
 
-        offer = self._quote_service.offer_from_text(current_text)
-        if offer is not None:
-            verdict = self._quote_service.evaluate_offer(rule, offer)
-            return (
-                f"Customer offered {offer:.2f} {rule.currency}. "
-                f"Verdict: {verdict.action}. {verdict.guidance}"
-            )
+        blocks: list[str] = []
         if merged.need_quote:
             quote = self._quote_service.quote(product, merged.quantity)
             if quote is not None:
-                quantity = quote.quantity or 1
-                return (
-                    f"Authoritative price: {quote.unit_price:.2f} {quote.currency}/unit, "
-                    f"total {quote.total_price:.2f} {quote.currency} for {quantity} units. "
-                    "Reply with exactly this; never change the numbers."
-                )
-        return None
+                if quote.quantity:
+                    blocks.append(
+                        f"Authoritative price: {quote.unit_price:.2f} {quote.currency}/unit, "
+                        f"total {quote.total_price:.2f} {quote.currency} for "
+                        f"{quote.quantity} units. Reply with exactly this; never change "
+                        "the numbers."
+                    )
+                else:
+                    blocks.append(
+                        f"Authoritative price: {quote.unit_price:.2f} {quote.currency}/unit. "
+                        "Reply with exactly this; never change the numbers."
+                    )
+        offer = extract_offer(current_text)
+        if offer is not None:
+            verdict = self._quote_service.evaluate_offer(rule, offer)
+            blocks.append(
+                f"Customer offered {offer:.2f} {rule.currency}. "
+                f"Verdict: {verdict.action}. {verdict.guidance} "
+                "Use these figures as-is; never change the numbers."
+            )
+        if not blocks:
+            return None
+        return "\n".join(blocks)
 
     def _apply_profile(
         self, customer: Customer, merged: CustomerIntent, inbound_count: int

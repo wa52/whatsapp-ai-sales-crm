@@ -10,8 +10,14 @@ from sqlmodel import Session, select
 
 from ..models import PriceTier, PricingRule, Product
 
-_OFFER_DOLLAR_RE = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
 _OFFER_SUFFIX_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:usd|dollars|us dollars)", re.IGNORECASE)
+_OFFER_DOLLAR_RE = re.compile(r"\$\s*(\d+(?:\.\d+)?)")
+_OFFER_SIGNAL_RE = re.compile(
+    r"can you do|how about|i'?ll pay|will pay|we can pay|can pay|offer|give (?:me|us)"
+    r"|price of|per unit|each",
+    re.IGNORECASE,
+)
+_FORBIDDEN_RE = re.compile(r"budget|total|moq|minimum", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -20,7 +26,7 @@ class PriceQuote:
     currency: str
     quantity: int | None
     unit_price: float
-    total_price: float
+    total_price: float | None
 
 
 @dataclass(frozen=True)
@@ -39,6 +45,42 @@ class QuoteService:
         return self._session.exec(
             select(PricingRule).where(PricingRule.product_id == product_id)
         ).first()
+
+    def set_rule(
+        self,
+        product_id: int,
+        *,
+        currency: str = "USD",
+        standard_price: float,
+        min_price: float,
+        auto_deal_price: float,
+        sample_price: float | None = None,
+        discount_allowed: bool = True,
+        tiers: list[PriceTier] | None = None,
+    ) -> PricingRule:
+        rule = self.get_rule(product_id)
+        if rule is None:
+            rule = PricingRule(product_id=product_id)
+            self._session.add(rule)
+        rule.currency = currency
+        rule.standard_price = standard_price
+        rule.min_price = min_price
+        rule.auto_deal_price = auto_deal_price
+        rule.sample_price = sample_price
+        rule.discount_allowed = discount_allowed
+        self._session.flush()
+
+        for old in self._session.exec(
+            select(PriceTier).where(PriceTier.rule_id == rule.id)
+        ).all():
+            self._session.delete(old)
+        self._session.flush()
+        for tier in tiers or []:
+            self._session.add(
+                PriceTier(rule_id=rule.id, **tier.model_dump())
+            )
+        self._session.commit()
+        return rule
 
     def unit_price_for(self, rule: PricingRule, quantity: int | None) -> float:
         if quantity is None:
@@ -59,13 +101,13 @@ class QuoteService:
         if rule is None:
             return None
         unit_price = self.unit_price_for(rule, quantity)
-        total = unit_price * quantity if quantity else unit_price
+        total = round(unit_price * quantity, 2) if quantity else None
         return PriceQuote(
             product_name=product.name,
             currency=rule.currency,
             quantity=quantity,
             unit_price=unit_price,
-            total_price=round(total, 2),
+            total_price=total,
         )
 
     def evaluate_offer(self, rule: PricingRule, offer_unit_price: float) -> OfferVerdict:
@@ -94,13 +136,24 @@ class QuoteService:
             ),
         )
 
-    @staticmethod
-    def offer_from_text(text: str) -> float | None:
-        """Extract a customer's unit-price offer (``$4.5`` or ``4.5 USD``) or None."""
-        match = _OFFER_SUFFIX_RE.search(text)
-        if match:
+
+def extract_offer(text: str) -> float | None:
+    """Extract a customer's unit-price offer (``$4.5`` or ``4.5 USD``) or None.
+
+    A number is only treated as an offer when it appears in an offer-like
+    context (``can you do``, ``pay``, ``how about``, ...) and is not part of a
+    budget/total statement, so "budget is 5000 USD" is not an offer.
+    """
+    for match in _OFFER_SUFFIX_RE.finditer(text):
+        if _is_offer(text, match.start()):
             return float(match.group(1))
-        match = _OFFER_DOLLAR_RE.search(text)
-        if match:
+    for match in _OFFER_DOLLAR_RE.finditer(text):
+        if _is_offer(text, match.start()):
             return float(match.group(1))
-        return None
+    return None
+
+
+def _is_offer(text: str, position: int) -> bool:
+    if _FORBIDDEN_RE.search(text[max(0, position - 30) : position]):
+        return False
+    return bool(_OFFER_SIGNAL_RE.search(text))

@@ -2,7 +2,7 @@ from sqlmodel import Session, SQLModel
 
 from whatsapp_ai_sales.db import create_engine_for
 from whatsapp_ai_sales.models import PriceTier, PricingRule, Product
-from whatsapp_ai_sales.pricing.service import OfferVerdict, QuoteService
+from whatsapp_ai_sales.pricing.service import OfferVerdict, QuoteService, extract_offer
 
 
 def _setup() -> tuple[Session, Product, PricingRule, QuoteService]:
@@ -83,17 +83,30 @@ def test_evaluate_offer_human_below_min() -> None:
 
 
 def test_offer_from_text_extracts_usd_suffix() -> None:
-    svc = QuoteService.__new__(QuoteService)
-    assert svc.offer_from_text("Can you do 3 USD?") == 3.0
-    assert svc.offer_from_text("I will pay 4.5 dollars each") == 4.5
+    assert extract_offer("Can you do 3 USD?") == 3.0
+    assert extract_offer("I will pay 4.5 dollars each") == 4.5
 
 
 def test_offer_from_text_extracts_dollar_sign() -> None:
-    svc = QuoteService.__new__(QuoteService)
-    assert svc.offer_from_text("How about $4.5 each?") == 4.5
+    assert extract_offer("How about $4.5 each?") == 4.5
 
 
 def test_offer_from_text_none_without_price_signal() -> None:
-    svc = QuoteService.__new__(QuoteService)
-    assert svc.offer_from_text("What is the price?") is None
-    assert svc.offer_from_text("I need 500 pieces") is None
+    assert extract_offer("What is the price?") is None
+    assert extract_offer("I need 500 pieces") is None
+    assert extract_offer("is it 4.5 dollars?") is None
+
+
+def test_offer_from_text_ignores_budget_and_total() -> None:
+    assert extract_offer("My budget is 5000 USD") is None
+    assert extract_offer("The total is $5000") is None
+
+
+def test_quote_total_is_none_without_quantity() -> None:
+    _, product, _, svc = _setup()
+
+    quote = svc.quote(product, None)
+
+    assert quote is not None
+    assert quote.unit_price == 10.0
+    assert quote.total_price is None

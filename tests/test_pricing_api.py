@@ -123,3 +123,26 @@ def test_acceptable_offer_verdict() -> None:
 
     system = llm.calls[0][0]["content"]
     assert "Verdict: accept" in system
+
+
+def test_quote_and_offer_both_injected() -> None:
+    client, llm, _ = _app()
+
+    client.post(
+        "/webhooks/whatsapp",
+        json=_meta("I need 500 pcs of LED strip, what is the price? can you do 5 USD?"),
+    )
+
+    system = llm.calls[0][0]["content"]
+    assert "6.50 USD/unit" in system  # the quote
+    assert "Verdict: human" in system  # and the low-offer verdict
+
+
+def test_unknown_quantity_quotes_unit_only() -> None:
+    client, llm, _ = _app()
+
+    client.post("/webhooks/whatsapp", json=_meta("What is the price of LED strip?"))
+
+    system = llm.calls[0][0]["content"]
+    assert "10.00 USD/unit" in system
+    assert "total" not in system
