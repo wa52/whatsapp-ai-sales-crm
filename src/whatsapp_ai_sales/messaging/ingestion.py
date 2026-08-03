@@ -29,6 +29,7 @@ class HandlingResult:
 class PricingOutcome:
     text: str
     verdict_action: str | None = None
+    quote_sent: bool = False
 
 
 class MessageIngestion:
@@ -104,6 +105,8 @@ class MessageIngestion:
             return HandlingResult(handled=True, reply_text=None)
 
         pricing = self._build_pricing(merged, inbound.text)
+        if pricing is not None and pricing.quote_sent:
+            conversation.quote_sent = True
         reply_text = self._agent.reply(
             history, customer, pricing_text=pricing.text if pricing else None
         )
@@ -171,10 +174,12 @@ class MessageIngestion:
             return None
 
         verdict_action: str | None = None
+        quote_sent = False
         blocks: list[str] = []
         if merged.need_quote:
             quote = self._quote_service.quote(product, merged.quantity)
             if quote is not None:
+                quote_sent = True
                 if quote.quantity:
                     blocks.append(
                         f"Authoritative price: {quote.unit_price:.2f} {quote.currency}/unit, "
@@ -198,7 +203,9 @@ class MessageIngestion:
             )
         if not blocks:
             return None
-        return PricingOutcome(text="\n".join(blocks), verdict_action=verdict_action)
+        return PricingOutcome(
+            text="\n".join(blocks), verdict_action=verdict_action, quote_sent=quote_sent
+        )
 
     def _apply_profile(
         self, customer: Customer, merged: CustomerIntent, inbound_count: int

@@ -81,9 +81,30 @@ class ManualMessageIn(BaseModel):
     content: str
 
 
+class DndIn(BaseModel):
+    enabled: bool
+
+
 class ConversationStateOut(BaseModel):
     id: int
     handler: str
+
+
+class DndOut(BaseModel):
+    id: int
+    dnd: bool
+
+
+@router.post("/conversations/{conversation_id}/dnd", response_model=DndOut)
+def set_dnd(conversation_id: int, payload: DndIn, session: SessionDep) -> DndOut:
+    """Mute/unmute automated replies and follow-ups for a conversation."""
+    conversation = session.get(Conversation, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation.dnd = payload.enabled
+    touch(conversation)
+    session.commit()
+    return DndOut(id=conversation.id, dnd=conversation.dnd)
 
 
 @router.post("/conversations/{conversation_id}/takeover", response_model=ConversationStateOut)

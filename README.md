@@ -44,6 +44,8 @@ WAS_WHATSAPP_VERIFY_TOKEN=verify-me
 | POST | `/api/kb/reindex` | 从 DB 重建向量索引 |
 | POST | `/api/pricing/products/{id}/rule` | 录入/更新产品定价规则（阶梯价/最低价/自动成交价） |
 | GET | `/api/pricing/products/{id}/rule` | 读取定价规则 |
+| POST | `/api/crm/conversations/{id}/dnd` | 免打扰（暂停自动回复与跟进） |
+| POST | `/api/followups/run` | 手动触发一次跟进扫描 |
 
 ## 知识库录入示例
 
@@ -82,6 +84,10 @@ POST /api/pricing/products/1/rule
 ```
 
 还价分支：报价 ≥ 自动成交价 → accept（可成交）；最低价 ≤ 报价 < 自动成交价 → negotiate（谨慎还价/通知销售）；< 最低价 → human（转人工）。
+
+## 自动跟进
+
+`WAS_FOLLOWUP_*` 配置阈值与文案。`start_followup_scheduler(app)`（`api/followup.py`）用 APScheduler 周期扫描；`POST /api/followups/run` 可手动触发。规则：仅 AI 接待、非免打扰、未超跟进上限（`WAS_FOLLOWUP_MAX`）且最后消息是外发的会话；发过报价且超 `WAS_FOLLOWUP_QUOTE_HOURS` 用报价跟进话术，否则超 `WAS_FOLLOWUP_NO_REPLY_HOURS` 用普通跟进话术。
 
 ## 测试
 

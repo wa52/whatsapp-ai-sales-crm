@@ -24,6 +24,17 @@ class Settings(BaseSettings):
 
     intent_llm_extract: bool = False
 
+    followup_no_reply_hours: int = 24
+    followup_quote_hours: int = 48
+    followup_max: int = 2
+    followup_interval_seconds: int = 3600
+    followup_no_reply_message: str = (
+        "Hello! Just following up on your inquiry. Would you like more information or a quote?"
+    )
+    followup_quote_message: str = (
+        "Hi! We sent you a quote earlier. Would you like to proceed or need any adjustments?"
+    )
+
     fallback_reply: str = (
         "Thank you for your message. I need to confirm this with our sales team "
         "and will get back to you shortly."

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from sqlmodel import Session, SQLModel
 
-from .api import crm, kb, pricing, webhook
+from .api import crm, followup, kb, pricing, webhook
 from .config import Settings
 from .config import settings as default_settings
 from .db import create_engine_for
@@ -68,6 +68,7 @@ def create_app(
 
     app = FastAPI(title="WhatsApp AI Sales")
     app.state.engine = engine
+    app.state.settings = settings
     app.state.llm = llm
     app.state.intent_llm_extract = settings.intent_llm_extract
     app.state.provider = provider or MockWhatsAppProvider()
@@ -78,6 +79,7 @@ def create_app(
     app.include_router(crm.router)
     app.include_router(kb.router)
     app.include_router(pricing.router)
+    app.include_router(followup.router)
     return app
 
 

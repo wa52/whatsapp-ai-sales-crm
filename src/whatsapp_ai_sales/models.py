@@ -40,6 +40,9 @@ class Conversation(SQLModel, table=True):
     customer_id: int = Field(foreign_key="customer.id", index=True)
     status: str = Field(default="active", index=True)
     handler: str = Field(default="ai", index=True)
+    dnd: bool = Field(default=False)
+    followups_sent: int = Field(default=0)
+    quote_sent: bool = Field(default=False)
     last_message_at: datetime | None = None
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
