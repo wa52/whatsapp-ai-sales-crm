@@ -9,6 +9,7 @@ from fastapi import Depends, Request
 from sqlmodel import Session
 
 from .messaging.ingestion import MessageIngestion
+from .messaging.intent import IntentExtractor
 from .rag.knowledge_base import KnowledgeBase
 
 
@@ -25,6 +26,7 @@ def get_ingestion(request: Request, session: SessionDep) -> MessageIngestion:
         session=session,
         agent=request.app.state.build_agent(session),
         provider=request.app.state.provider,
+        intent_extractor=IntentExtractor(),
     )
 
 

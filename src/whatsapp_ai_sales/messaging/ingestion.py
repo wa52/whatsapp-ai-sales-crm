@@ -13,6 +13,8 @@ from ..repos import get_conversation_messages
 from ..whatsapp.base import WhatsAppProvider
 from ..whatsapp.webhook import InboundMessage
 from .agent import AutoReplyAgent
+from .intent import CustomerIntent, IntentExtractor, merge_intents
+from .scoring import score_lead
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,8 @@ class MessageIngestion:
     """Turns an inbound webhook message into persisted state and an outbound reply.
 
     A message that was already processed (same provider message id) is skipped.
+    When an intent extractor is configured, the message also refreshes the
+    customer profile and lead score.
     """
 
     def __init__(
@@ -33,10 +37,12 @@ class MessageIngestion:
         session: Session,
         agent: AutoReplyAgent,
         provider: WhatsAppProvider,
+        intent_extractor: IntentExtractor | None = None,
     ) -> None:
         self.session = session
         self._agent = agent
         self._provider = provider
+        self._intent_extractor = intent_extractor
 
     def handle_inbound(self, inbound: InboundMessage) -> HandlingResult:
         existing = self.session.exec(
@@ -83,6 +89,8 @@ class MessageIngestion:
                 status="sent",
             )
         )
+        if self._intent_extractor is not None:
+            self._update_profile(customer, history)
         now = datetime.now(UTC)
         conversation.last_message_at = now
         conversation.updated_at = now
@@ -90,6 +98,28 @@ class MessageIngestion:
         self.session.commit()
 
         return HandlingResult(handled=True, reply_text=reply_text)
+
+    def _update_profile(self, customer: Customer, history: list[Message]) -> None:
+        merged = self._accumulate_intent(customer, history)
+        customer.interested_product = merged.product or customer.interested_product
+        customer.quantity = merged.quantity or customer.quantity
+        customer.budget = merged.budget or customer.budget
+        customer.purchase_time = merged.purchase_time or customer.purchase_time
+        customer.customer_type = merged.customer_type or customer.customer_type
+        inbound_count = sum(1 for m in history if m.role == ROLE_INBOUND)
+        lead = score_lead(merged, message_count=inbound_count)
+        customer.lead_score = lead.score
+        customer.lead_level = lead.level
+
+    def _accumulate_intent(self, customer: Customer, history: list[Message]) -> CustomerIntent:
+        """Merge intents across all customer messages so earlier signals persist."""
+        merged = CustomerIntent(country=customer.country_code)
+        for message in history:
+            if message.role != ROLE_INBOUND:
+                continue
+            intent = self._intent_extractor.extract(message.content, customer)
+            merged = merge_intents(merged, intent)
+        return merged
 
     def _get_or_create(self, model, conditions: list, **fields):
         obj = self.session.exec(select(model).where(*conditions)).first()

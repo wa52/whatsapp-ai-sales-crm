@@ -22,6 +22,13 @@ class Customer(SQLModel, table=True):
     name: str | None = None
     country_code: str | None = None
     source_channel: str = "whatsapp"
+    interested_product: str | None = None
+    quantity: int | None = None
+    budget: float | None = None
+    purchase_time: str | None = None
+    customer_type: str | None = None
+    lead_score: int | None = None
+    lead_level: str | None = None
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 

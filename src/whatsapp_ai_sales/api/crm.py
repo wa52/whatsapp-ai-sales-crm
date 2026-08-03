@@ -24,6 +24,8 @@ class ConversationOut(BaseModel):
     handler: str
     status: str
     last_message_at: datetime | None = None
+    lead_score: int | None = None
+    lead_level: str | None = None
 
 
 class MessageOut(BaseModel):
@@ -51,6 +53,8 @@ def list_conversations(session: SessionDep) -> list[ConversationOut]:
             handler=c.handler,
             status=c.status,
             last_message_at=c.last_message_at,
+            lead_score=cu.lead_score,
+            lead_level=cu.lead_level,
         )
         for c, cu in rows
     ]
